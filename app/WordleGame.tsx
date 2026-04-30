@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 const WORD_LENGTH = 5;
 const MAX_GUESSES = 5;
@@ -17,8 +17,95 @@ const initialGameState: GameState = {
   message: "Enter a 5-letter guess to fill the board.",
 };
 
+function sanitizeGuess(value: string) {
+  return value.replace(/[^a-z]/gi, "").slice(0, WORD_LENGTH).toUpperCase();
+}
+
+function submitGuess(current: GameState): GameState {
+  if (current.currentGuess.length !== WORD_LENGTH) {
+    return {
+      ...current,
+      message: `Guesses must be ${WORD_LENGTH} letters.`,
+    };
+  }
+
+  if (current.guesses.length >= MAX_GUESSES) {
+    return {
+      ...current,
+      message: "Reset the board to start another local round.",
+    };
+  }
+
+  const guesses = [...current.guesses, current.currentGuess];
+
+  return {
+    guesses,
+    currentGuess: "",
+    message:
+      guesses.length === MAX_GUESSES
+        ? "Board filled. Endpoint submission comes in a later step."
+        : "Guess recorded locally. No endpoint submission yet.",
+  };
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target.isContentEditable ||
+    target.closest("input, textarea, select, button, a[href], [contenteditable]") !==
+      null
+  );
+}
+
 export function WordleGame() {
   const [game, setGame] = useState<GameState>(initialGameState);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        isEditableTarget(event.target)
+      ) {
+        return;
+      }
+
+      if (/^[a-z]$/i.test(event.key)) {
+        event.preventDefault();
+        setGame((current) => ({
+          ...current,
+          currentGuess: sanitizeGuess(`${current.currentGuess}${event.key}`),
+          message: initialGameState.message,
+        }));
+        return;
+      }
+
+      if (event.key === "Backspace") {
+        event.preventDefault();
+        setGame((current) => ({
+          ...current,
+          currentGuess: current.currentGuess.slice(0, -1),
+          message: initialGameState.message,
+        }));
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        setGame(submitGuess);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const rows = Array.from({ length: MAX_GUESSES }, (_, rowIndex) => {
     if (game.guesses[rowIndex]) {
@@ -35,40 +122,14 @@ export function WordleGame() {
   function handleGuessChange(value: string) {
     setGame((current) => ({
       ...current,
-      currentGuess: value.replace(/[^a-z]/gi, "").slice(0, WORD_LENGTH),
+      currentGuess: sanitizeGuess(value),
       message: "Enter a 5-letter guess to fill the board.",
     }));
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    setGame((current) => {
-      if (current.currentGuess.length !== WORD_LENGTH) {
-        return {
-          ...current,
-          message: `Guesses must be ${WORD_LENGTH} letters.`,
-        };
-      }
-
-      if (current.guesses.length >= MAX_GUESSES) {
-        return {
-          ...current,
-          message: "Reset the board to start another local round.",
-        };
-      }
-
-      const guesses = [...current.guesses, current.currentGuess.toUpperCase()];
-
-      return {
-        guesses,
-        currentGuess: "",
-        message:
-          guesses.length === MAX_GUESSES
-            ? "Board filled. Endpoint submission comes in a later step."
-            : "Guess recorded locally. No endpoint submission yet.",
-      };
-    });
+    setGame(submitGuess);
   }
 
   function handleReset() {
