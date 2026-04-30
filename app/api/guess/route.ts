@@ -7,17 +7,32 @@ function normalizeGuess(guess: string) {
 }
 
 function scoreGuess(guess: string): GuessResult[] {
-  return Array.from(guess, (letter, index) => {
-    if (letter === SECRET_WORD[index]) {
-      return "correct";
+  const result = Array<GuessResult>(guess.length).fill("absent");
+  const remainingLetters: Record<string, number> = {};
+
+  for (let index = 0; index < guess.length; index += 1) {
+    if (guess[index] === SECRET_WORD[index]) {
+      result[index] = "correct";
+    } else {
+      const secretLetter = SECRET_WORD[index];
+      remainingLetters[secretLetter] = (remainingLetters[secretLetter] ?? 0) + 1;
+    }
+  }
+
+  for (let index = 0; index < guess.length; index += 1) {
+    if (result[index] === "correct") {
+      continue;
     }
 
-    if (SECRET_WORD.includes(letter)) {
-      return "present";
-    }
+    const letter = guess[index];
 
-    return "absent";
-  });
+    if ((remainingLetters[letter] ?? 0) > 0) {
+      result[index] = "present";
+      remainingLetters[letter] -= 1;
+    }
+  }
+
+  return result;
 }
 
 export async function POST(request: Request) {
