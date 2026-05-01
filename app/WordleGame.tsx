@@ -144,6 +144,37 @@ function getKeyboardKeyClassName(
   } flex h-10 transform-gpu items-center justify-center rounded-[4px] text-sm font-black uppercase shadow-sm transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:h-11`;
 }
 
+function KeyboardIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="size-5"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <path d="M7 10h.01M11 10h.01M15 10h.01M19 10h.01M7 14h10" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="size-5"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth="2.5"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
 export function WordleGame() {
   const [game, setGame] = useState<GameState>(initialGameState);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(true);
@@ -380,18 +411,19 @@ export function WordleGame() {
           >
             Reset
           </button>
-          <button
-            type="button"
-            onClick={() => setIsKeyboardVisible((current) => !current)}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-slate-400 hover:text-slate-900"
-          >
-            {isKeyboardVisible ? "Hide keyboard" : "Show keyboard"}
-          </button>
         </div>
       </div>
 
       {isKeyboardVisible ? (
         <div className="fixed inset-x-0 bottom-0 z-10 border-t border-slate-200 bg-slate-50/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur">
+          <button
+            type="button"
+            onClick={() => setIsKeyboardVisible(false)}
+            aria-label="Hide keyboard"
+            className="absolute right-2 top-2 flex size-9 items-center justify-center rounded-full border border-slate-300 bg-white/90 text-slate-500 shadow-sm transition hover:border-slate-400 hover:text-slate-900 active:translate-y-px sm:right-4"
+          >
+            <ChevronDownIcon />
+          </button>
           <div className="mx-auto flex max-w-[31rem] flex-col gap-2">
             {keyboardRows.map((row) => (
               <div key={row.join("")} className="flex justify-center gap-1.5 sm:gap-2">
@@ -415,7 +447,16 @@ export function WordleGame() {
             ))}
           </div>
         </div>
-      ) : null}
+      ) : (
+        <button
+          type="button"
+          onClick={() => setIsKeyboardVisible(true)}
+          aria-label="Show keyboard"
+          className="fixed bottom-4 right-4 z-10 flex size-11 items-center justify-center rounded-full border border-slate-300 bg-white/95 text-slate-600 shadow-lg transition hover:border-slate-400 hover:text-slate-950 active:translate-y-px"
+        >
+          <KeyboardIcon />
+        </button>
+      )}
     </section>
   );
 }
