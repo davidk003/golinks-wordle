@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 const WORD_LENGTH = 5;
 const MAX_GUESSES = 5;
@@ -44,6 +44,12 @@ const resultClassNames: Record<GuessResult, string> = {
   correct: "border-[#6aaa64] bg-[#6aaa64] text-white",
   present: "border-[#c9b458] bg-[#c9b458] text-white",
   absent: "border-[#787c7e] bg-[#787c7e] text-white",
+};
+
+const resultColors: Record<GuessResult, string> = {
+  correct: "#6aaa64",
+  present: "#c9b458",
+  absent: "#787c7e",
 };
 
 const keyboardResultClassNames: Record<GuessResult, string> = {
@@ -122,8 +128,24 @@ function isModifiedKeyboardEvent(event: KeyboardEvent) {
 
 function getTileClassName(result?: GuessResult) {
   return `flex size-[clamp(2.75rem,16vw,3.35rem)] items-center justify-center border-2 text-2xl font-black uppercase leading-none ${
-    result ? resultClassNames[result] : "border-[#d3d6da] bg-white text-slate-950"
+    result
+      ? `${resultClassNames[result]} wordle-tile-reveal`
+      : "border-[#d3d6da] bg-white text-slate-950"
   }`;
+}
+
+function getTileStyle(
+  result: GuessResult | undefined,
+  columnIndex: number,
+): CSSProperties | undefined {
+  if (!result) {
+    return undefined;
+  }
+
+  return {
+    "--tile-result-color": resultColors[result],
+    animationDelay: `${columnIndex * 180}ms`,
+  } as CSSProperties;
 }
 
 function getKeyboardKeyClassName(
@@ -391,6 +413,7 @@ export function WordleGame() {
               <div
                 key={`${rowIndex}-${columnIndex}`}
                 className={getTileClassName(result)}
+                style={getTileStyle(result, columnIndex)}
               >
                 {letter}
               </div>
