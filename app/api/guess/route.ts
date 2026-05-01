@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 const WORD_PATTERN = /^[A-Z]{5}$/;
 const MAX_GUESSES = 5;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
-const PUZZLE_EPOCH_UTC = Date.UTC(2024, 0, 1);
+const PUZZLE_EPOCH_UTC = Date.UTC(2026, 4, 1);
 const TOKEN_SECRET =
   process.env.WORDLE_TOKEN_SECRET ?? randomBytes(32).toString("base64url");
 

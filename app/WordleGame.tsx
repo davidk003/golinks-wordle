@@ -242,11 +242,15 @@ export function WordleGame() {
   const [game, setGame] = useState<GameState>(initialGameState);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(true);
   const [pressedKey, setPressedKey] = useState<string | null>(null);
-  const [hasCopiedShareText, setHasCopiedShareText] = useState(false);
+  const [shareTooltipMessage, setShareTooltipMessage] = useState<string | null>(
+    null,
+  );
   const submitGuessRef = useRef<() => void>(() => {});
   const pressKeyRef = useRef<(key: string) => void>(() => {});
   const pressKeyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shareTooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   pressKeyRef.current = (key: string) => {
     const normalizedKey = key.length === 1 ? key.toUpperCase() : key;
@@ -270,8 +274,8 @@ export function WordleGame() {
         clearTimeout(pressKeyTimeoutRef.current);
       }
 
-      if (copiedTimeoutRef.current) {
-        clearTimeout(copiedTimeoutRef.current);
+      if (shareTooltipTimeoutRef.current) {
+        clearTimeout(shareTooltipTimeoutRef.current);
       }
     };
   }, []);
@@ -440,42 +444,41 @@ export function WordleGame() {
     void submitCurrentGuess();
   };
 
+  function showShareTooltipMessage(message: string) {
+    setShareTooltipMessage(message);
+
+    if (shareTooltipTimeoutRef.current) {
+      clearTimeout(shareTooltipTimeoutRef.current);
+    }
+
+    shareTooltipTimeoutRef.current = setTimeout(() => {
+      setShareTooltipMessage(null);
+      shareTooltipTimeoutRef.current = null;
+    }, 1600);
+  }
+
   function handleReset(event: MouseEvent<HTMLButtonElement>) {
     event.currentTarget.blur();
-    setHasCopiedShareText(false);
+
+    if (shareTooltipTimeoutRef.current) {
+      clearTimeout(shareTooltipTimeoutRef.current);
+      shareTooltipTimeoutRef.current = null;
+    }
+
+    setShareTooltipMessage(null);
     setGame(initialGameState);
   }
 
-  async function handleShareResults(event: MouseEvent<HTMLButtonElement>) {
-    event.currentTarget.blur();
-
+  async function handleShareResults() {
     if (game.status === "playing") {
       return;
     }
 
     try {
       await navigator.clipboard.writeText(getShareText(game));
-      setHasCopiedShareText(true);
-
-      if (copiedTimeoutRef.current) {
-        clearTimeout(copiedTimeoutRef.current);
-      }
-
-      copiedTimeoutRef.current = setTimeout(() => {
-        setHasCopiedShareText(false);
-        copiedTimeoutRef.current = null;
-      }, 1600);
-
-      setGame((current) => ({
-        ...current,
-        message: "Copied.",
-      }));
+      showShareTooltipMessage("Copied");
     } catch {
-      setHasCopiedShareText(false);
-      setGame((current) => ({
-        ...current,
-        message: "Unable to copy results.",
-      }));
+      showShareTooltipMessage("Unable to copy results.");
     }
   }
 
@@ -533,8 +536,10 @@ export function WordleGame() {
             role="tooltip"
             className="pointer-events-none absolute right-0 top-full mt-2 w-max max-w-[min(20rem,calc(100vw-2rem))] rounded-md bg-black/80 p-3 text-left text-xs font-semibold text-white opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100"
           >
-            {hasCopiedShareText ? (
-              <span className="block font-bold">Copied</span>
+            {shareTooltipMessage ? (
+              <span className="block font-bold" aria-live="polite" aria-atomic="true">
+                {shareTooltipMessage}
+              </span>
             ) : (
               <pre className="m-0 whitespace-pre-wrap font-mono leading-relaxed text-white">
                 {shareText}
