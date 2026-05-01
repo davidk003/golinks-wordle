@@ -19,6 +19,7 @@ type GameState = {
   status: "playing" | "won" | "lost";
   isSubmitting: boolean;
   puzzleNumber: number;
+  gameToken?: string;
 };
 
 type GuessResult = "correct" | "present" | "absent";
@@ -31,8 +32,9 @@ type SubmittedGuess = {
 type GuessResponse = {
   guess: string;
   result: GuessResult[];
-  word: string;
+  word?: string;
   puzzleNumber?: number;
+  gameToken?: string;
 };
 
 const initialGameState: GameState = {
@@ -365,7 +367,10 @@ export function WordleGame() {
       const response = await fetch("/api/guess", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guess: submittedGuess }),
+        body: JSON.stringify({
+          guess: submittedGuess,
+          ...(game.gameToken ? { gameToken: game.gameToken } : {}),
+        }),
       });
       const data = await response.json();
 
@@ -393,17 +398,25 @@ export function WordleGame() {
           Number.isFinite(guessResult.puzzleNumber)
             ? guessResult.puzzleNumber
             : current.puzzleNumber;
+        const gameToken =
+          typeof guessResult.gameToken === "string"
+            ? guessResult.gameToken
+            : current.gameToken;
+        const lostMessage = guessResult.word
+          ? `No guesses left. The word was ${guessResult.word}.`
+          : "No guesses left.";
 
         return {
           guesses,
           currentGuess: "",
           isSubmitting: false,
           puzzleNumber,
+          gameToken,
           status: won ? "won" : lost ? "lost" : "playing",
           message: won
             ? "You won! Reset the board to play again."
             : lost
-              ? `No guesses left. The word was ${guessResult.word}.`
+              ? lostMessage
               : "Keep going.",
         };
       });

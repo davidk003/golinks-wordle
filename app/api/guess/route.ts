@@ -1,11 +1,15 @@
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const runtime = "nodejs";
 
 const WORD_PATTERN = /^[A-Z]{5}$/;
+const MAX_GUESSES = 5;
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const PUZZLE_EPOCH_UTC = Date.UTC(2024, 0, 1);
+const TOKEN_SECRET =
+  process.env.WORDLE_TOKEN_SECRET ?? randomBytes(32).toString("base64url");
 
 const WORDS = readFileSync(join(process.cwd(), "data", "wordles.txt"), "utf8")
   .split(/\r?\n/)
@@ -18,6 +22,11 @@ if (WORDS.length === 0) {
 
 type GuessResult = "correct" | "present" | "absent";
 
+type GameTokenPayload = {
+  puzzleNumber: number;
+  guessCount: number;
+};
+
 function normalizeGuess(guess: string) {
   return guess.trim().toUpperCase();
 }
@@ -26,12 +35,88 @@ function getTodaysPuzzle() {
   const puzzleNumber = Math.floor(
     (Date.now() - PUZZLE_EPOCH_UTC) / MILLISECONDS_PER_DAY,
   );
+
+  return getPuzzleForNumber(puzzleNumber);
+}
+
+function getPuzzleForNumber(puzzleNumber: number) {
   const wordIndex = ((puzzleNumber % WORDS.length) + WORDS.length) % WORDS.length;
 
   return {
     puzzleNumber,
     word: WORDS[wordIndex],
   };
+}
+
+function signTokenPayload(encodedPayload: string) {
+  return createHmac("sha256", TOKEN_SECRET).update(encodedPayload).digest("base64url");
+}
+
+function createGameToken(payload: GameTokenPayload) {
+  const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString(
+    "base64url",
+  );
+  const signature = signTokenPayload(encodedPayload);
+
+  return `${encodedPayload}.${signature}`;
+}
+
+function isValidTokenPayload(payload: unknown): payload is GameTokenPayload {
+  if (payload === null || typeof payload !== "object") {
+    return false;
+  }
+
+  const tokenPayload = payload as Record<string, unknown>;
+
+  return (
+    Number.isInteger(tokenPayload.puzzleNumber) &&
+    Number.isInteger(tokenPayload.guessCount) &&
+    typeof tokenPayload.puzzleNumber === "number" &&
+    typeof tokenPayload.guessCount === "number" &&
+    tokenPayload.guessCount >= 0 &&
+    tokenPayload.guessCount < MAX_GUESSES
+  );
+}
+
+function readGameToken(gameToken: unknown): GameTokenPayload | null {
+  if (gameToken === undefined) {
+    return null;
+  }
+
+  if (typeof gameToken !== "string") {
+    throw new Error("Game token must be a string.");
+  }
+
+  const [encodedPayload, signature, extra] = gameToken.split(".");
+
+  if (!encodedPayload || !signature || extra !== undefined) {
+    throw new Error("Invalid game token.");
+  }
+
+  const expectedSignature = signTokenPayload(encodedPayload);
+  const signatureBuffer = Buffer.from(signature);
+  const expectedSignatureBuffer = Buffer.from(expectedSignature);
+
+  if (
+    signatureBuffer.length !== expectedSignatureBuffer.length ||
+    !timingSafeEqual(signatureBuffer, expectedSignatureBuffer)
+  ) {
+    throw new Error("Invalid game token.");
+  }
+
+  let payload: unknown;
+
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+  } catch {
+    throw new Error("Invalid game token.");
+  }
+
+  if (!isValidTokenPayload(payload)) {
+    throw new Error("Invalid game token.");
+  }
+
+  return payload;
 }
 
 function scoreGuess(guess: string, secretWord: string): GuessResult[] {
@@ -74,6 +159,10 @@ export async function POST(request: Request) {
 
   const guess =
     body && typeof body === "object" && "guess" in body ? body.guess : undefined;
+  const gameToken =
+    body && typeof body === "object" && "gameToken" in body
+      ? body.gameToken
+      : undefined;
 
   if (typeof guess !== "string") {
     return Response.json({ error: "Guess must be a string." }, { status: 400 });
@@ -88,12 +177,33 @@ export async function POST(request: Request) {
     );
   }
 
-  const puzzle = getTodaysPuzzle();
+  let tokenPayload: GameTokenPayload | null;
+
+  try {
+    tokenPayload = readGameToken(gameToken);
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : "Invalid game token." },
+      { status: 400 },
+    );
+  }
+
+  const puzzle = tokenPayload
+    ? getPuzzleForNumber(tokenPayload.puzzleNumber)
+    : getTodaysPuzzle();
+  const result = scoreGuess(normalizedGuess, puzzle.word);
+  const guessCount = (tokenPayload?.guessCount ?? 0) + 1;
+  const won = result.every((letterResult) => letterResult === "correct");
+  const lost = !won && guessCount >= MAX_GUESSES;
 
   return Response.json({
     guess: normalizedGuess,
-    result: scoreGuess(normalizedGuess, puzzle.word),
-    word: puzzle.word,
+    result,
+    ...(won || lost ? { word: puzzle.word } : {}),
     puzzleNumber: puzzle.puzzleNumber,
+    gameToken: createGameToken({
+      puzzleNumber: puzzle.puzzleNumber,
+      guessCount,
+    }),
   });
 }
