@@ -46,6 +46,18 @@ const resultClassNames: Record<GuessResult, string> = {
   absent: "border-[#787c7e] bg-[#787c7e] text-white",
 };
 
+const keyboardResultClassNames: Record<GuessResult, string> = {
+  correct: "bg-[#6aaa64] text-white",
+  present: "bg-[#c9b458] text-white",
+  absent: "bg-[#787c7e] text-white",
+};
+
+const resultRank: Record<GuessResult, number> = {
+  absent: 1,
+  present: 2,
+  correct: 3,
+};
+
 function sanitizeGuess(value: string) {
   return value.replace(/[^a-z]/gi, "").slice(0, WORD_LENGTH).toUpperCase();
 }
@@ -114,6 +126,18 @@ function getTileClassName(result?: GuessResult) {
   }`;
 }
 
+function getKeyboardKeyClassName(key: string, result?: GuessResult) {
+  const widthClass =
+    key === "ENTER" || key === "BACKSPACE"
+      ? "min-w-[3.5rem] px-2 text-[0.65rem] sm:min-w-[4.2rem]"
+      : "min-w-[2.2rem] px-2 sm:min-w-[2.55rem]";
+  const colorClass = result
+    ? keyboardResultClassNames[result]
+    : "bg-[#d3d6da] text-black";
+
+  return `${widthClass} ${colorClass} flex h-10 items-center justify-center rounded-[4px] text-sm font-black uppercase shadow-sm transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:h-11`;
+}
+
 export function WordleGame() {
   const [game, setGame] = useState<GameState>(initialGameState);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(true);
@@ -163,6 +187,22 @@ export function WordleGame() {
 
     return "";
   });
+
+  const keyboardStatuses = game.guesses.reduce<Record<string, GuessResult>>(
+    (statuses, submittedGuess) => {
+      submittedGuess.guess.split("").forEach((letter, index) => {
+        const result = submittedGuess.result[index];
+        const existingResult = statuses[letter];
+
+        if (!existingResult || resultRank[result] > resultRank[existingResult]) {
+          statuses[letter] = result;
+        }
+      });
+
+      return statuses;
+    },
+    {},
+  );
 
   async function submitCurrentGuess() {
     if (game.status !== "playing" || game.isSubmitting) {
@@ -266,7 +306,7 @@ export function WordleGame() {
   return (
     <section
       className={`mt-8 flex w-full max-w-md flex-col items-center gap-6 ${
-        isKeyboardVisible ? "pb-40" : ""
+        isKeyboardVisible ? "pb-48 sm:pb-52" : ""
       }`}
     >
       <div
@@ -294,36 +334,42 @@ export function WordleGame() {
         <p id="game-message" className="text-sm text-slate-500" aria-live="polite">
           {game.message}
         </p>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600"
-        >
-          Reset
-        </button>
-        <button
-          type="button"
-          onClick={() => setIsKeyboardVisible((current) => !current)}
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600"
-        >
-          {isKeyboardVisible ? "Hide keyboard" : "Show keyboard"}
-        </button>
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            type="button"
+            onClick={handleReset}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-slate-400 hover:text-slate-900"
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsKeyboardVisible((current) => !current)}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-slate-400 hover:text-slate-900"
+          >
+            {isKeyboardVisible ? "Hide keyboard" : "Show keyboard"}
+          </button>
+        </div>
       </div>
 
       {isKeyboardVisible ? (
-        <div className="fixed inset-x-0 bottom-0 z-10 border-t border-slate-200 bg-white p-3">
-          <div className="mx-auto flex max-w-xl flex-col gap-2">
+        <div className="fixed inset-x-0 bottom-0 z-10 border-t border-slate-200 bg-slate-50/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur">
+          <div className="mx-auto flex max-w-[31rem] flex-col gap-2">
             {keyboardRows.map((row) => (
-              <div key={row.join("")} className="flex justify-center gap-2">
+              <div key={row.join("")} className="flex justify-center gap-1.5 sm:gap-2">
                 {row.map((key) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => handleKeyboardPress(key)}
                     disabled={game.status !== "playing" || game.isSubmitting}
-                    className="rounded bg-slate-200 px-3 py-3 text-sm font-bold text-slate-950 disabled:opacity-50"
+                    aria-label={key === "BACKSPACE" ? "Backspace" : key}
+                    className={getKeyboardKeyClassName(
+                      key,
+                      key.length === 1 ? keyboardStatuses[key] : undefined,
+                    )}
                   >
-                    {key === "BACKSPACE" ? "Backspace" : key}
+                    {key === "BACKSPACE" ? "⌫" : key}
                   </button>
                 ))}
               </div>
