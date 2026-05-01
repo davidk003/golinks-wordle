@@ -25,13 +25,6 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-@media (max-width: 319px) {
-  html,
-  body {
-    min-width: 320px;
-  }
-}
-
 @keyframes wordle-tile-reveal {
   0% {
     background-color: #ffffff;

@@ -137,7 +137,7 @@ function isModifiedKeyboardEvent(event: KeyboardEvent) {
 }
 
 function getTileClassName(result?: GuessResult) {
-  return `flex size-[clamp(2.75rem,min(16vw,8dvh),3.35rem)] items-center justify-center border-2 text-[clamp(1.35rem,7vw,1.5rem)] font-black uppercase leading-none ${
+  return `flex size-[clamp(2.15rem,min(15vw,7dvh),3.35rem)] items-center justify-center border-2 text-[clamp(1.15rem,6.3vw,1.5rem)] font-black uppercase leading-none ${
     result
       ? `${resultClassNames[result]} wordle-tile-reveal`
       : "border-[#d3d6da] bg-white text-slate-950"
@@ -176,15 +176,15 @@ function getKeyboardKeyClassName(
 ) {
   const widthClass =
     key === "ENTER" || key === "BACKSPACE"
-      ? "flex-[1.55_1_0] min-w-0 px-1 text-[clamp(0.56rem,2.3vw,0.7rem)] sm:flex-[1.65_1_0] sm:px-2"
-      : "flex-[1_1_0] min-w-0 px-1 text-[clamp(0.78rem,3.4vw,0.875rem)] sm:px-2";
+      ? "flex-[1.55_1_0] min-w-0 px-0.5 text-[clamp(0.5rem,2.15vw,0.7rem)] sm:flex-[1.65_1_0] sm:px-2"
+      : "flex-[1_1_0] min-w-0 px-0.5 text-[clamp(0.68rem,3vw,0.875rem)] sm:px-2";
   const colorClass = result
     ? keyboardResultClassNames[result]
     : "bg-[#d3d6da] text-black";
 
   return `${widthClass} ${colorClass} ${
     isPressed ? "keyboard-key-pressed" : ""
-  } flex h-[clamp(2.35rem,11vw,2.75rem)] transform-gpu items-center justify-center rounded-[4px] font-black uppercase shadow-sm transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:h-11`;
+  } flex h-[clamp(2.2rem,min(10.5vw,6.8dvh),2.75rem)] transform-gpu items-center justify-center rounded-[4px] font-black uppercase shadow-sm transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:h-11`;
 }
 
 function KeyboardIcon() {
@@ -466,6 +466,16 @@ export function WordleGame() {
     }
   }
 
+  function handleHideKeyboard(event: MouseEvent<HTMLButtonElement>) {
+    event.currentTarget.blur();
+    setIsKeyboardVisible(false);
+  }
+
+  function handleShowKeyboard(event: MouseEvent<HTMLButtonElement>) {
+    event.currentTarget.blur();
+    setIsKeyboardVisible(true);
+  }
+
   function handleKeyboardPress(key: string) {
     pressKeyRef.current(key);
 
@@ -484,9 +494,9 @@ export function WordleGame() {
 
   return (
     <section
-      className={`relative mt-4 flex w-full max-w-md flex-col items-center gap-4 sm:mt-8 sm:gap-6 ${
+      className={`relative mt-[clamp(0.75rem,2.5dvh,1rem)] flex w-full max-w-md flex-col items-center gap-[clamp(0.75rem,2.2dvh,1rem)] sm:mt-8 sm:gap-6 ${
         isKeyboardVisible
-          ? "pb-[calc(11rem+env(safe-area-inset-bottom))] sm:pb-[calc(12rem+env(safe-area-inset-bottom))]"
+          ? "pb-[calc(clamp(10.5rem,36dvh,13.5rem)+env(safe-area-inset-bottom))] sm:pb-[calc(15rem+env(safe-area-inset-bottom))]"
           : ""
       }`}
     >
@@ -523,7 +533,7 @@ export function WordleGame() {
 
       <div
         aria-label="Wordle board"
-        className="grid max-w-full grid-cols-5 gap-1 rounded-sm border border-slate-200 bg-white p-1 shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
+        className="grid max-w-full grid-cols-5 gap-[clamp(0.125rem,1vw,0.25rem)] rounded-sm border border-slate-200 bg-white p-[clamp(0.125rem,1vw,0.25rem)] shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
       >
         {rows.map((row, rowIndex) =>
           Array.from({ length: WORD_LENGTH }, (_, columnIndex) => {
@@ -543,7 +553,7 @@ export function WordleGame() {
         )}
       </div>
 
-      <div className="flex w-full flex-col items-center gap-3 text-center">
+      <div className="flex w-full flex-col items-center gap-[clamp(0.5rem,1.5dvh,0.75rem)] text-center">
         <p id="game-message" className="text-sm text-slate-500" aria-live="polite">
           {game.message}
         </p>
@@ -559,18 +569,21 @@ export function WordleGame() {
       </div>
 
       {isKeyboardVisible ? (
-        <div className="fixed inset-x-0 bottom-0 z-10 min-w-[20rem] border-t border-slate-200 bg-slate-50/95 px-1 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur sm:px-3">
-          <button
-            type="button"
-            onClick={() => setIsKeyboardVisible(false)}
-            aria-label="Hide keyboard"
-            className="absolute right-1.5 top-1.5 flex size-8 items-center justify-center rounded-full border border-slate-300 bg-white/90 text-slate-500 shadow-sm transition hover:border-slate-400 hover:text-slate-900 active:translate-y-px sm:right-4 sm:top-2 sm:size-9"
-          >
-            <ChevronDownIcon />
-          </button>
-          <div className="mx-auto flex w-full max-w-[31rem] flex-col gap-1.5 sm:gap-2">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-slate-50/95 pb-[calc(env(safe-area-inset-bottom)+clamp(0.35rem,1.5dvh,0.75rem))] pl-[max(0.125rem,env(safe-area-inset-left))] pr-[max(0.125rem,env(safe-area-inset-right))] pt-[clamp(0.25rem,1.2dvh,0.5rem)] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur sm:px-3">
+          <div className="mx-auto flex w-full max-w-[31rem] flex-col gap-[clamp(0.1875rem,0.8dvh,0.5rem)]">
+            <div className="px-[clamp(0.25rem,2vw,0.5rem)]">
+              <button
+                type="button"
+                onClick={handleHideKeyboard}
+                aria-label="Hide keyboard"
+                className="relative z-10 flex h-8 w-full touch-manipulation select-none items-center justify-center gap-1 rounded-md border border-transparent text-xs font-bold uppercase tracking-[0.12em] text-slate-500 transition hover:bg-white/80 hover:text-slate-900 active:translate-y-px"
+              >
+                <ChevronDownIcon />
+                Hide keyboard
+              </button>
+            </div>
             {keyboardRows.map((row) => (
-              <div key={row.join("")} className="flex w-full justify-center gap-0.5 sm:gap-2">
+              <div key={row.join("")} className="flex w-full justify-center gap-[clamp(1px,0.45vw,0.5rem)] sm:gap-2">
                 {row.map((key) => (
                   <button
                     key={key}
@@ -594,9 +607,9 @@ export function WordleGame() {
       ) : (
         <button
           type="button"
-          onClick={() => setIsKeyboardVisible(true)}
+          onClick={handleShowKeyboard}
           aria-label="Show keyboard"
-          className="fixed bottom-4 right-4 z-10 flex size-11 items-center justify-center rounded-full border border-slate-300 bg-white/95 text-slate-600 shadow-lg transition hover:border-slate-400 hover:text-slate-950 active:translate-y-px"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-[calc(env(safe-area-inset-right)+0.75rem)] z-20 flex size-11 touch-manipulation select-none items-center justify-center rounded-full border border-slate-300 bg-white/95 text-slate-600 shadow-lg transition hover:border-slate-400 hover:text-slate-950 active:translate-y-px"
         >
           <KeyboardIcon />
         </button>
