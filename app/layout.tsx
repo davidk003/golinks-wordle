@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GoLinks Wordle",
+  title: "Definitely not Wordle",
   description: "A Wordle-style game for guessing internal go links.",
 };
 

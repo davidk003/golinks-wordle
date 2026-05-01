@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const WORD_LENGTH = 5;
 const MAX_GUESSES = 5;
@@ -44,15 +44,33 @@ function sanitizeGuess(value: string) {
   return value.replace(/[^a-z]/gi, "").slice(0, WORD_LENGTH).toUpperCase();
 }
 
-function isEditableTarget(target: EventTarget | null) {
+function isTextEntryTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
     return false;
   }
 
   return (
     target.isContentEditable ||
-    target.closest("input, textarea, select, button, a[href], [contenteditable]") !==
-      null
+    target.closest("input, textarea, select, [contenteditable]") !== null
+  );
+}
+
+function isActivationTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return target.closest("button, a[href]") !== null;
+}
+
+function isModifiedKeyboardEvent(event: KeyboardEvent) {
+  return (
+    event.defaultPrevented ||
+    event.isComposing ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.altKey ||
+    isTextEntryTarget(event.target)
   );
 }
 
@@ -64,18 +82,11 @@ function getTileClassName(result?: GuessResult) {
 
 export function WordleGame() {
   const [game, setGame] = useState<GameState>(initialGameState);
-  const formRef = useRef<HTMLFormElement>(null);
+  const submitGuessRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (
-        event.defaultPrevented ||
-        event.isComposing ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        isEditableTarget(event.target)
-      ) {
+      if (isModifiedKeyboardEvent(event)) {
         return;
       }
 
@@ -112,8 +123,12 @@ export function WordleGame() {
       }
 
       if (event.key === "Enter") {
+        if (isActivationTarget(event.target)) {
+          return;
+        }
+
         event.preventDefault();
-        formRef.current?.requestSubmit();
+        submitGuessRef.current();
       }
     }
 
@@ -134,23 +149,7 @@ export function WordleGame() {
     return "";
   });
 
-  function handleGuessChange(value: string) {
-    setGame((current) => ({
-      ...current,
-      currentGuess:
-        current.status === "playing" && !current.isSubmitting
-          ? sanitizeGuess(value)
-          : current.currentGuess,
-      message:
-        current.status === "playing" && !current.isSubmitting
-          ? initialGameState.message
-          : current.message,
-    }));
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  async function submitCurrentGuess() {
     if (game.status !== "playing" || game.isSubmitting) {
       return;
     }
@@ -227,6 +226,10 @@ export function WordleGame() {
     }
   }
 
+  submitGuessRef.current = () => {
+    void submitCurrentGuess();
+  };
+
   function handleReset() {
     setGame(initialGameState);
   }
@@ -254,49 +257,18 @@ export function WordleGame() {
         )}
       </div>
 
-      <form
-        ref={formRef}
-        onSubmit={handleSubmit}
-        className="flex w-full flex-col gap-3 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm"
-      >
-        <label className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500" htmlFor="guess">
-          Current guess
-        </label>
-        <input
-          id="guess"
-          name="guess"
-          type="text"
-          value={game.currentGuess}
-          onChange={(event) => handleGuessChange(event.target.value)}
-          disabled={game.status !== "playing" || game.isSubmitting}
-          maxLength={WORD_LENGTH}
-          autoComplete="off"
-          className="rounded-md border border-slate-300 px-4 py-2.5 text-center text-xl font-black uppercase tracking-[0.32em] outline-none focus:border-[#6aaa64] focus:ring-2 focus:ring-[#6aaa64]/15"
-          aria-describedby="game-message"
-        />
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p id="game-message" className="text-sm text-slate-500" aria-live="polite">
-            {game.message}
-          </p>
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={game.status !== "playing" || game.isSubmitting}
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {game.isSubmitting ? "Checking..." : "Submit guess"}
-            </button>
-            <button
-              type="button"
-              onClick={handleReset}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600"
-            >
-              Reset
-            </button>
-          </div>
-        </div>
-      </form>
+      <div className="flex w-full flex-col items-center gap-3 text-center">
+        <p id="game-message" className="text-sm text-slate-500" aria-live="polite">
+          {game.message}
+        </p>
+        <button
+          type="button"
+          onClick={handleReset}
+          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600"
+        >
+          Reset
+        </button>
+      </div>
     </section>
   );
 }
