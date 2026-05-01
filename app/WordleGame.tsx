@@ -240,9 +240,11 @@ export function WordleGame() {
   const [game, setGame] = useState<GameState>(initialGameState);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(true);
   const [pressedKey, setPressedKey] = useState<string | null>(null);
+  const [hasCopiedShareText, setHasCopiedShareText] = useState(false);
   const submitGuessRef = useRef<() => void>(() => {});
   const pressKeyRef = useRef<(key: string) => void>(() => {});
   const pressKeyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   pressKeyRef.current = (key: string) => {
     const normalizedKey = key.length === 1 ? key.toUpperCase() : key;
@@ -264,6 +266,10 @@ export function WordleGame() {
     return () => {
       if (pressKeyTimeoutRef.current) {
         clearTimeout(pressKeyTimeoutRef.current);
+      }
+
+      if (copiedTimeoutRef.current) {
+        clearTimeout(copiedTimeoutRef.current);
       }
     };
   }, []);
@@ -423,6 +429,7 @@ export function WordleGame() {
 
   function handleReset(event: MouseEvent<HTMLButtonElement>) {
     event.currentTarget.blur();
+    setHasCopiedShareText(false);
     setGame(initialGameState);
   }
 
@@ -435,11 +442,23 @@ export function WordleGame() {
 
     try {
       await navigator.clipboard.writeText(getShareText(game));
+      setHasCopiedShareText(true);
+
+      if (copiedTimeoutRef.current) {
+        clearTimeout(copiedTimeoutRef.current);
+      }
+
+      copiedTimeoutRef.current = setTimeout(() => {
+        setHasCopiedShareText(false);
+        copiedTimeoutRef.current = null;
+      }, 1600);
+
       setGame((current) => ({
         ...current,
-        message: "Results copied to clipboard.",
+        message: "Copied.",
       }));
     } catch {
+      setHasCopiedShareText(false);
       setGame((current) => ({
         ...current,
         message: "Unable to copy results.",
@@ -491,9 +510,13 @@ export function WordleGame() {
             role="tooltip"
             className="pointer-events-none absolute right-0 top-full mt-2 w-max max-w-[min(20rem,calc(100vw-2rem))] rounded-md bg-black/80 p-3 text-left text-xs font-semibold text-white opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100"
           >
-            <pre className="m-0 whitespace-pre-wrap font-mono leading-relaxed text-white">
-              {shareText}
-            </pre>
+            {hasCopiedShareText ? (
+              <span className="block font-bold">Copied</span>
+            ) : (
+              <pre className="m-0 whitespace-pre-wrap font-mono leading-relaxed text-white">
+                {shareText}
+              </pre>
+            )}
           </div>
         </div>
       </div>
