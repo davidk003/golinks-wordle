@@ -1,6 +1,6 @@
 "use client";
 
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type MouseEvent, useEffect, useRef, useState } from "react";
 
 const WORD_LENGTH = 5;
 const MAX_GUESSES = 5;
@@ -374,7 +374,8 @@ export function WordleGame() {
     void submitCurrentGuess();
   };
 
-  function handleReset() {
+  function handleReset(event: MouseEvent<HTMLButtonElement>) {
+    event.currentTarget.blur();
     setGame(initialGameState);
   }
 
