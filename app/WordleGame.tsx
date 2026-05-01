@@ -6,6 +6,8 @@ const WORD_LENGTH = 5;
 const MAX_GUESSES = 5;
 const DEFAULT_PUZZLE_NUMBER = 0;
 
+type GameMode = "daily" | "practice";
+
 const keyboardRows = [
   ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
   ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
@@ -18,6 +20,7 @@ type GameState = {
   message: string;
   status: "playing" | "won" | "lost";
   isSubmitting: boolean;
+  mode: GameMode;
   puzzleNumber: number;
   gameToken?: string;
 };
@@ -32,8 +35,14 @@ type SubmittedGuess = {
 type GuessResponse = {
   guess: string;
   result: GuessResult[];
+  mode?: GameMode;
   word?: string;
   puzzleNumber?: number;
+  gameToken?: string;
+};
+
+type PracticeResponse = {
+  mode?: GameMode;
   gameToken?: string;
 };
 
@@ -43,6 +52,7 @@ const initialGameState: GameState = {
   message: "Enter a 5-letter guess to fill the board.",
   status: "playing",
   isSubmitting: false,
+  mode: "daily",
   puzzleNumber: DEFAULT_PUZZLE_NUMBER,
 };
 
@@ -162,13 +172,15 @@ function getTileStyle(
 
 function getShareText(game: GameState) {
   const score = game.status === "lost" ? "X" : game.guesses.length;
+  const gameLabel =
+    game.mode === "practice"
+      ? "GoLinks Wordle Practice"
+      : `GoLinks Wordle #${game.puzzleNumber}`;
   const rows = game.guesses.map((guess) =>
     guess.result.map((result) => shareResultEmoji[result]).join(""),
   );
 
-  return [`GoLinks Wordle #${game.puzzleNumber} ${score}/${MAX_GUESSES}`, "", ...rows].join(
-    "\n",
-  );
+  return [`${gameLabel} ${score}/${MAX_GUESSES}`, "", ...rows].join("\n");
 }
 
 function getKeyboardKeyClassName(
@@ -242,11 +254,14 @@ export function WordleGame() {
   const [game, setGame] = useState<GameState>(initialGameState);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(true);
   const [pressedKey, setPressedKey] = useState<string | null>(null);
+  const [isStartingPractice, setIsStartingPractice] = useState(false);
   const [shareTooltipMessage, setShareTooltipMessage] = useState<string | null>(
     null,
   );
   const submitGuessRef = useRef<() => void>(() => {});
   const pressKeyRef = useRef<(key: string) => void>(() => {});
+  const submitInFlightRef = useRef(false);
+  const practiceRequestIdRef = useRef(0);
   const pressKeyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shareTooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -347,7 +362,7 @@ export function WordleGame() {
   const shareText = canShare ? getShareText(game) : "";
 
   async function submitCurrentGuess() {
-    if (game.status !== "playing" || game.isSubmitting) {
+    if (game.status !== "playing" || game.isSubmitting || submitInFlightRef.current) {
       return;
     }
 
@@ -360,6 +375,7 @@ export function WordleGame() {
     }
 
     const submittedGuess = game.currentGuess;
+    submitInFlightRef.current = true;
 
     setGame((current) => ({
       ...current,
@@ -406,6 +422,10 @@ export function WordleGame() {
           typeof guessResult.gameToken === "string"
             ? guessResult.gameToken
             : current.gameToken;
+        const mode =
+          guessResult.mode === "daily" || guessResult.mode === "practice"
+            ? guessResult.mode
+            : current.mode;
         const lostMessage = guessResult.word
           ? `No guesses left. The word was ${guessResult.word}.`
           : "No guesses left.";
@@ -414,6 +434,7 @@ export function WordleGame() {
           guesses,
           currentGuess: "",
           isSubmitting: false,
+          mode,
           puzzleNumber,
           gameToken,
           status: won ? "won" : lost ? "lost" : "playing",
@@ -437,6 +458,8 @@ export function WordleGame() {
             error instanceof Error ? error.message : "Unable to submit guess.",
         };
       });
+    } finally {
+      submitInFlightRef.current = false;
     }
   }
 
@@ -459,6 +482,8 @@ export function WordleGame() {
 
   function handleReset(event: MouseEvent<HTMLButtonElement>) {
     event.currentTarget.blur();
+    practiceRequestIdRef.current += 1;
+    setIsStartingPractice(false);
 
     if (shareTooltipTimeoutRef.current) {
       clearTimeout(shareTooltipTimeoutRef.current);
@@ -467,6 +492,72 @@ export function WordleGame() {
 
     setShareTooltipMessage(null);
     setGame(initialGameState);
+  }
+
+  async function handleStartPractice(event: MouseEvent<HTMLButtonElement>) {
+    event.currentTarget.blur();
+
+    if (game.isSubmitting || isStartingPractice || submitInFlightRef.current) {
+      return;
+    }
+
+    const requestId = practiceRequestIdRef.current + 1;
+    practiceRequestIdRef.current = requestId;
+    setShareTooltipMessage(null);
+    setIsStartingPractice(true);
+    setGame((current) => ({
+      ...current,
+      isSubmitting: true,
+      message: "Starting practice game...",
+    }));
+
+    try {
+      const response = await fetch("/api/practice", { method: "POST" });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Unable to start practice game.",
+        );
+      }
+
+      const practiceGame = data as PracticeResponse;
+
+      if (
+        practiceGame.mode !== "practice" ||
+        typeof practiceGame.gameToken !== "string"
+      ) {
+        throw new Error("Unable to start practice game.");
+      }
+
+      if (practiceRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setGame({
+        ...initialGameState,
+        mode: "practice",
+        gameToken: practiceGame.gameToken,
+        message: "Practice game started. Enter a 5-letter guess.",
+      });
+    } catch (error) {
+      if (practiceRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setGame((current) => ({
+        ...current,
+        isSubmitting: false,
+        message:
+          error instanceof Error ? error.message : "Unable to start practice game.",
+      }));
+    } finally {
+      if (practiceRequestIdRef.current === requestId) {
+        setIsStartingPractice(false);
+      }
+    }
   }
 
   async function handleShareResults() {
@@ -579,9 +670,18 @@ export function WordleGame() {
           <button
             type="button"
             onClick={handleReset}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-slate-400 hover:text-slate-900"
+            disabled={game.isSubmitting || isStartingPractice}
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Reset
+          </button>
+          <button
+            type="button"
+            onClick={handleStartPractice}
+            disabled={game.isSubmitting || isStartingPractice}
+            className="rounded-md border border-[#6aaa64] bg-[#6aaa64] px-4 py-2 text-sm font-bold text-white transition hover:border-[#5b9956] hover:bg-[#5b9956] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isStartingPractice ? "Starting..." : "New practice"}
           </button>
         </div>
       </div>
