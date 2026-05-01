@@ -126,7 +126,11 @@ function getTileClassName(result?: GuessResult) {
   }`;
 }
 
-function getKeyboardKeyClassName(key: string, result?: GuessResult) {
+function getKeyboardKeyClassName(
+  key: string,
+  result?: GuessResult,
+  isPressed = false,
+) {
   const widthClass =
     key === "ENTER" || key === "BACKSPACE"
       ? "min-w-[3.5rem] px-2 text-[0.65rem] sm:min-w-[4.2rem]"
@@ -135,13 +139,42 @@ function getKeyboardKeyClassName(key: string, result?: GuessResult) {
     ? keyboardResultClassNames[result]
     : "bg-[#d3d6da] text-black";
 
-  return `${widthClass} ${colorClass} flex h-10 items-center justify-center rounded-[4px] text-sm font-black uppercase shadow-sm transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:h-11`;
+  return `${widthClass} ${colorClass} ${
+    isPressed ? "keyboard-key-pressed" : ""
+  } flex h-10 transform-gpu items-center justify-center rounded-[4px] text-sm font-black uppercase shadow-sm transition active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:h-11`;
 }
 
 export function WordleGame() {
   const [game, setGame] = useState<GameState>(initialGameState);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(true);
+  const [pressedKey, setPressedKey] = useState<string | null>(null);
   const submitGuessRef = useRef<() => void>(() => {});
+  const pressKeyRef = useRef<(key: string) => void>(() => {});
+  const pressKeyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  pressKeyRef.current = (key: string) => {
+    const normalizedKey = key.length === 1 ? key.toUpperCase() : key;
+
+    if (pressKeyTimeoutRef.current) {
+      clearTimeout(pressKeyTimeoutRef.current);
+    }
+
+    setPressedKey(normalizedKey);
+    pressKeyTimeoutRef.current = setTimeout(() => {
+      setPressedKey((current) =>
+        current === normalizedKey ? null : current,
+      );
+      pressKeyTimeoutRef.current = null;
+    }, 160);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pressKeyTimeoutRef.current) {
+        clearTimeout(pressKeyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -151,12 +184,14 @@ export function WordleGame() {
 
       if (/^[a-z]$/i.test(event.key)) {
         event.preventDefault();
+        pressKeyRef.current(event.key);
         setGame((current) => addLetterToGuess(current, event.key));
         return;
       }
 
       if (event.key === "Backspace") {
         event.preventDefault();
+        pressKeyRef.current("BACKSPACE");
         setGame(removeLetterFromGuess);
         return;
       }
@@ -167,6 +202,7 @@ export function WordleGame() {
         }
 
         event.preventDefault();
+        pressKeyRef.current("ENTER");
         submitGuessRef.current();
       }
     }
@@ -290,6 +326,8 @@ export function WordleGame() {
   }
 
   function handleKeyboardPress(key: string) {
+    pressKeyRef.current(key);
+
     if (key === "ENTER") {
       void submitCurrentGuess();
       return;
@@ -367,6 +405,7 @@ export function WordleGame() {
                     className={getKeyboardKeyClassName(
                       key,
                       key.length === 1 ? keyboardStatuses[key] : undefined,
+                      pressedKey === key,
                     )}
                   >
                     {key === "BACKSPACE" ? "⌫" : key}
