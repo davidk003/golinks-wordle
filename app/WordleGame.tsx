@@ -6,6 +6,23 @@ const WORD_LENGTH = 5;
 const MAX_GUESSES = 5;
 const DEFAULT_PUZZLE_NUMBER = 0;
 const TILE_ENTER_CLEANUP_DELAY_MS = 240;
+const TILE_REVEAL_DURATION_MS = 920;
+const TILE_REVEAL_STAGGER_MS = 180;
+const WIN_CONFETTI_DELAY_MS =
+  TILE_REVEAL_DURATION_MS / 2 + TILE_REVEAL_STAGGER_MS;
+const WIN_CONFETTI_COLORS = ["#6aaa64", "#c9b458", "#787c7e", "#ffffff"];
+
+type TimeoutRef = {
+  current: ReturnType<typeof setTimeout> | null;
+};
+
+type NumberRef = {
+  current: number;
+};
+
+type ConfettiResetRef = {
+  current: (() => void) | null;
+};
 
 type GameMode = "daily" | "practice";
 
@@ -203,7 +220,7 @@ function getTileStyle(
 
   return {
     "--tile-result-color": resultColors[result],
-    animationDelay: `${columnIndex * 180}ms`,
+    animationDelay: `${columnIndex * TILE_REVEAL_STAGGER_MS}ms`,
   } as CSSProperties;
 }
 
@@ -218,6 +235,69 @@ function getShareText(game: GameState) {
   );
 
   return [`${gameLabel} ${score}/${MAX_GUESSES}`, "", ...rows].join("\n");
+}
+
+function clearTimeoutRef(timeoutRef: TimeoutRef) {
+  if (!timeoutRef.current) {
+    return;
+  }
+
+  clearTimeout(timeoutRef.current);
+  timeoutRef.current = null;
+}
+
+function cancelWinConfetti(
+  timeoutRef: TimeoutRef,
+  celebrationIdRef: NumberRef,
+  confettiResetRef: ConfettiResetRef,
+) {
+  clearTimeoutRef(timeoutRef);
+  celebrationIdRef.current += 1;
+  confettiResetRef.current?.();
+  confettiResetRef.current = null;
+}
+
+function clampToViewportFraction(value: number) {
+  return Math.min(1, Math.max(0, value));
+}
+
+function getConfettiOriginForRow(
+  tileRows: (HTMLDivElement | null)[][],
+  rowIndex: number,
+) {
+  const rowTiles = (tileRows[rowIndex] ?? []).filter(
+    (tile): tile is HTMLDivElement => tile !== null,
+  );
+
+  if (rowTiles.length === 0) {
+    return { x: 0.5, y: 0.42 };
+  }
+
+  const bounds = rowTiles.reduce(
+    (currentBounds, tile) => {
+      const rect = tile.getBoundingClientRect();
+
+      return {
+        left: Math.min(currentBounds.left, rect.left),
+        right: Math.max(currentBounds.right, rect.right),
+        top: Math.min(currentBounds.top, rect.top),
+        bottom: Math.max(currentBounds.bottom, rect.bottom),
+      };
+    },
+    {
+      left: Number.POSITIVE_INFINITY,
+      right: Number.NEGATIVE_INFINITY,
+      top: Number.POSITIVE_INFINITY,
+      bottom: Number.NEGATIVE_INFINITY,
+    },
+  );
+  const rowCenterX = (bounds.left + bounds.right) / 2;
+  const rowCenterY = (bounds.top + bounds.bottom) / 2;
+
+  return {
+    x: clampToViewportFraction(rowCenterX / window.innerWidth),
+    y: clampToViewportFraction(rowCenterY / window.innerHeight),
+  };
 }
 
 function getKeyboardKeyClassName(
@@ -299,13 +379,20 @@ export function WordleGame() {
   const pressKeyRef = useRef<(key: string) => void>(() => {});
   const submitInFlightRef = useRef(false);
   const practiceRequestIdRef = useRef(0);
+  const hasCelebratedWinRef = useRef(false);
+  const winCelebrationIdRef = useRef(0);
   const pressKeyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shareTooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const winConfettiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const confettiResetRef = useRef<(() => void) | null>(null);
   const enterTileTimeoutsRef = useRef<
     Map<number, ReturnType<typeof setTimeout>>
   >(new Map());
+  const tileRefs = useRef<(HTMLDivElement | null)[][]>([]);
 
   pressKeyRef.current = (key: string) => {
     const normalizedKey = key.length === 1 ? key.toUpperCase() : key;
@@ -339,6 +426,12 @@ export function WordleGame() {
       if (shareTooltipTimeoutRef.current) {
         clearTimeout(shareTooltipTimeoutRef.current);
       }
+
+      cancelWinConfetti(
+        winConfettiTimeoutRef,
+        winCelebrationIdRef,
+        confettiResetRef,
+      );
 
       enterTileTimeouts.forEach((timeout) => clearTimeout(timeout));
       enterTileTimeouts.clear();
@@ -378,6 +471,84 @@ export function WordleGame() {
       enterTileTimeouts.delete(animationId);
     });
   }, [game.enteringTiles]);
+
+  useEffect(() => {
+    if (game.status !== "won" || hasCelebratedWinRef.current) {
+      return;
+    }
+
+    const winningRowIndex = game.guesses.length - 1;
+    const celebrationId = winCelebrationIdRef.current + 1;
+    winCelebrationIdRef.current = celebrationId;
+    hasCelebratedWinRef.current = true;
+    clearTimeoutRef(winConfettiTimeoutRef);
+
+    winConfettiTimeoutRef.current = setTimeout(() => {
+      winConfettiTimeoutRef.current = null;
+
+      if (winCelebrationIdRef.current !== celebrationId) {
+        return;
+      }
+
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        return;
+      }
+
+      const origin = getConfettiOriginForRow(tileRefs.current, winningRowIndex);
+
+      void import("canvas-confetti")
+        .then(({ default: confetti }) => {
+          if (winCelebrationIdRef.current !== celebrationId) {
+            return;
+          }
+
+          if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            return;
+          }
+
+          confettiResetRef.current = () => {
+            confetti.reset();
+          };
+
+          const animation = confetti({
+            colors: WIN_CONFETTI_COLORS,
+            disableForReducedMotion: true,
+            gravity: 0.9,
+            origin,
+            particleCount: 90,
+            spread: 70,
+            startVelocity: 34,
+          });
+          confetti({
+            colors: WIN_CONFETTI_COLORS,
+            disableForReducedMotion: true,
+            gravity: 0.95,
+            origin,
+            particleCount: 35,
+            scalar: 0.75,
+            spread: 110,
+            startVelocity: 22,
+          });
+
+          if (animation) {
+            void animation.finally(() => {
+              if (winCelebrationIdRef.current === celebrationId) {
+                confettiResetRef.current = null;
+              }
+            });
+          }
+        })
+        .catch(() => undefined);
+    }, WIN_CONFETTI_DELAY_MS);
+
+    return () => {
+      cancelWinConfetti(
+        winConfettiTimeoutRef,
+        winCelebrationIdRef,
+        confettiResetRef,
+      );
+    };
+  }, [game.guesses.length, game.status]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -572,6 +743,12 @@ export function WordleGame() {
     practiceRequestIdRef.current += 1;
     setIsStartingPractice(false);
     clearEnterTileTimeouts();
+    cancelWinConfetti(
+      winConfettiTimeoutRef,
+      winCelebrationIdRef,
+      confettiResetRef,
+    );
+    hasCelebratedWinRef.current = false;
 
     if (shareTooltipTimeoutRef.current) {
       clearTimeout(shareTooltipTimeoutRef.current);
@@ -592,6 +769,12 @@ export function WordleGame() {
     const requestId = practiceRequestIdRef.current + 1;
     practiceRequestIdRef.current = requestId;
     clearEnterTileTimeouts();
+    cancelWinConfetti(
+      winConfettiTimeoutRef,
+      winCelebrationIdRef,
+      confettiResetRef,
+    );
+    hasCelebratedWinRef.current = false;
     setShareTooltipMessage(null);
     setIsStartingPractice(true);
     setGame((current) => ({
@@ -749,6 +932,10 @@ export function WordleGame() {
             return (
               <div
                 key={`${rowIndex}-${columnIndex}`}
+                ref={(node) => {
+                  tileRefs.current[rowIndex] ??= [];
+                  tileRefs.current[rowIndex][columnIndex] = node;
+                }}
                 className={getTileClassName(result, Boolean(enteringTile))}
                 style={getTileStyle(result, columnIndex)}
               >
