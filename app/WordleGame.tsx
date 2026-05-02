@@ -5,6 +5,7 @@ import { type CSSProperties, type MouseEvent, useEffect, useRef, useState } from
 const WORD_LENGTH = 5;
 const MAX_GUESSES = 5;
 const DEFAULT_PUZZLE_NUMBER = 0;
+const TILE_ENTER_CLEANUP_DELAY_MS = 240;
 
 type GameMode = "daily" | "practice";
 
@@ -17,6 +18,8 @@ const keyboardRows = [
 type GameState = {
   guesses: SubmittedGuess[];
   currentGuess: string;
+  enteringTiles: EnteredTile[];
+  entryAnimationId: number;
   message: string;
   status: "playing" | "won" | "lost";
   isSubmitting: boolean;
@@ -30,6 +33,12 @@ type GuessResult = "correct" | "present" | "absent";
 type SubmittedGuess = {
   guess: string;
   result: GuessResult[];
+};
+
+type EnteredTile = {
+  rowIndex: number;
+  columnIndex: number;
+  animationId: number;
 };
 
 type GuessResponse = {
@@ -49,6 +58,8 @@ type PracticeResponse = {
 const initialGameState: GameState = {
   guesses: [],
   currentGuess: "",
+  enteringTiles: [],
+  entryAnimationId: 0,
   message: "Enter a 5-letter guess to fill the board.",
   status: "playing",
   isSubmitting: false,
@@ -99,9 +110,27 @@ function addLetterToGuess(game: GameState, letter: string): GameState {
     return game;
   }
 
+  const currentGuess = game.currentGuess;
+  const nextGuess = sanitizeGuess(`${currentGuess}${letter}`);
+  const letterWasAdded = nextGuess.length > currentGuess.length;
+  const entryAnimationId = letterWasAdded
+    ? game.entryAnimationId + 1
+    : game.entryAnimationId;
+
   return {
     ...game,
-    currentGuess: sanitizeGuess(`${game.currentGuess}${letter}`),
+    currentGuess: nextGuess,
+    enteringTiles: letterWasAdded
+      ? [
+          ...game.enteringTiles,
+          {
+            rowIndex: game.guesses.length,
+            columnIndex: currentGuess.length,
+            animationId: entryAnimationId,
+          },
+        ]
+      : game.enteringTiles,
+    entryAnimationId,
     message: initialGameState.message,
   };
 }
@@ -111,9 +140,15 @@ function removeLetterFromGuess(game: GameState): GameState {
     return game;
   }
 
+  const nextGuess = game.currentGuess.slice(0, -1);
+
   return {
     ...game,
-    currentGuess: game.currentGuess.slice(0, -1),
+    currentGuess: nextGuess,
+    enteringTiles: game.enteringTiles.filter(
+      (tile) =>
+        tile.rowIndex !== game.guesses.length || tile.columnIndex < nextGuess.length,
+    ),
     message: initialGameState.message,
   };
 }
@@ -148,11 +183,13 @@ function isModifiedKeyboardEvent(event: KeyboardEvent) {
   );
 }
 
-function getTileClassName(result?: GuessResult) {
+function getTileClassName(result?: GuessResult, isEntering = false) {
   return `flex size-[clamp(2.15rem,min(15vw,7dvh),3.35rem)] items-center justify-center border-2 text-[clamp(1.15rem,6.3vw,1.5rem)] font-black uppercase leading-none ${
     result
       ? `${resultClassNames[result]} wordle-tile-reveal`
-      : "border-[#d3d6da] bg-white text-slate-950"
+      : `border-[#d3d6da] bg-white text-slate-950 ${
+          isEntering ? "wordle-tile-enter" : ""
+        }`
   }`;
 }
 
@@ -266,6 +303,9 @@ export function WordleGame() {
   const shareTooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const enterTileTimeoutsRef = useRef<
+    Map<number, ReturnType<typeof setTimeout>>
+  >(new Map());
 
   pressKeyRef.current = (key: string) => {
     const normalizedKey = key.length === 1 ? key.toUpperCase() : key;
@@ -283,7 +323,14 @@ export function WordleGame() {
     }, 160);
   };
 
+  function clearEnterTileTimeouts() {
+    enterTileTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+    enterTileTimeoutsRef.current.clear();
+  }
+
   useEffect(() => {
+    const enterTileTimeouts = enterTileTimeoutsRef.current;
+
     return () => {
       if (pressKeyTimeoutRef.current) {
         clearTimeout(pressKeyTimeoutRef.current);
@@ -292,8 +339,45 @@ export function WordleGame() {
       if (shareTooltipTimeoutRef.current) {
         clearTimeout(shareTooltipTimeoutRef.current);
       }
+
+      enterTileTimeouts.forEach((timeout) => clearTimeout(timeout));
+      enterTileTimeouts.clear();
     };
   }, []);
+
+  useEffect(() => {
+    const enterTileTimeouts = enterTileTimeoutsRef.current;
+    const activeAnimationIds = new Set(
+      game.enteringTiles.map((tile) => tile.animationId),
+    );
+
+    game.enteringTiles.forEach((tile) => {
+      if (enterTileTimeouts.has(tile.animationId)) {
+        return;
+      }
+
+      const timeout = setTimeout(() => {
+        enterTileTimeouts.delete(tile.animationId);
+        setGame((current) => ({
+          ...current,
+          enteringTiles: current.enteringTiles.filter(
+            (currentTile) => currentTile.animationId !== tile.animationId,
+          ),
+        }));
+      }, TILE_ENTER_CLEANUP_DELAY_MS);
+
+      enterTileTimeouts.set(tile.animationId, timeout);
+    });
+
+    enterTileTimeouts.forEach((timeout, animationId) => {
+      if (activeAnimationIds.has(animationId)) {
+        return;
+      }
+
+      clearTimeout(timeout);
+      enterTileTimeouts.delete(animationId);
+    });
+  }, [game.enteringTiles]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -379,6 +463,7 @@ export function WordleGame() {
 
     setGame((current) => ({
       ...current,
+      enteringTiles: [],
       isSubmitting: true,
       message: "Checking guess...",
     }));
@@ -433,6 +518,8 @@ export function WordleGame() {
         return {
           guesses,
           currentGuess: "",
+          enteringTiles: [],
+          entryAnimationId: current.entryAnimationId,
           isSubmitting: false,
           mode,
           puzzleNumber,
@@ -484,6 +571,7 @@ export function WordleGame() {
     event.currentTarget.blur();
     practiceRequestIdRef.current += 1;
     setIsStartingPractice(false);
+    clearEnterTileTimeouts();
 
     if (shareTooltipTimeoutRef.current) {
       clearTimeout(shareTooltipTimeoutRef.current);
@@ -503,10 +591,12 @@ export function WordleGame() {
 
     const requestId = practiceRequestIdRef.current + 1;
     practiceRequestIdRef.current = requestId;
+    clearEnterTileTimeouts();
     setShareTooltipMessage(null);
     setIsStartingPractice(true);
     setGame((current) => ({
       ...current,
+      enteringTiles: [],
       isSubmitting: true,
       message: "Starting practice game...",
     }));
@@ -536,6 +626,7 @@ export function WordleGame() {
         return;
       }
 
+      clearEnterTileTimeouts();
       setGame({
         ...initialGameState,
         mode: "practice",
@@ -648,11 +739,17 @@ export function WordleGame() {
           Array.from({ length: WORD_LENGTH }, (_, columnIndex) => {
             const letter = row[columnIndex] ?? "";
             const result = game.guesses[rowIndex]?.result[columnIndex];
+            const enteringTile = letter && !result
+              ? game.enteringTiles.find(
+                  (tile) =>
+                    tile.rowIndex === rowIndex && tile.columnIndex === columnIndex,
+                )
+              : undefined;
 
             return (
               <div
                 key={`${rowIndex}-${columnIndex}`}
-                className={getTileClassName(result)}
+                className={getTileClassName(result, Boolean(enteringTile))}
                 style={getTileStyle(result, columnIndex)}
               >
                 {letter}
