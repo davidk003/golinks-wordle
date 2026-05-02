@@ -1,9 +1,9 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { MAX_GUESSES, WORD_PATTERN } from "../../wordleConfig";
 
-export const WORD_PATTERN = /^[A-Z]{5}$/;
-export const MAX_GUESSES = 5;
+export { MAX_GUESSES, WORD_PATTERN };
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const PUZZLE_EPOCH_UTC = Date.UTC(2026, 4, 1);

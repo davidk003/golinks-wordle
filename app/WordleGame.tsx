@@ -1,9 +1,8 @@
 "use client";
 
 import { type CSSProperties, type MouseEvent, useEffect, useRef, useState } from "react";
+import { MAX_GUESSES, WORD_LENGTH } from "./wordleConfig";
 
-const WORD_LENGTH = 5;
-const MAX_GUESSES = 5;
 const DEFAULT_PUZZLE_NUMBER = 0;
 const TILE_ENTER_CLEANUP_DELAY_MS = 240;
 const TILE_REVEAL_DURATION_MS = 920;
@@ -201,7 +200,7 @@ function isModifiedKeyboardEvent(event: KeyboardEvent) {
 }
 
 function getTileClassName(result?: GuessResult, isEntering = false) {
-  return `flex size-[clamp(2.15rem,min(15vw,7dvh),3.35rem)] items-center justify-center border-2 text-[clamp(1.15rem,6.3vw,1.5rem)] font-black uppercase leading-none ${
+  return `flex size-[clamp(2rem,min(15vw,6.2dvh),3.35rem)] items-center justify-center border-2 text-[clamp(1.05rem,6.3vw,1.5rem)] font-black uppercase leading-none ${
     result
       ? `${resultClassNames[result]} wordle-tile-reveal`
       : `border-[#d3d6da] bg-white text-slate-950 ${
