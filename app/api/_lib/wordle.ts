@@ -1,23 +1,13 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { MAX_GUESSES, WORD_PATTERN } from "../../wordleConfig";
+import { getAllowedGuesses, isAllowedGuess, WORDS } from "../../wordleWords";
 
-export { MAX_GUESSES, WORD_PATTERN };
+export { getAllowedGuesses, isAllowedGuess, MAX_GUESSES, WORD_PATTERN };
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const PUZZLE_EPOCH_UTC = Date.UTC(2026, 4, 1);
 const TOKEN_SECRET =
   process.env.WORDLE_TOKEN_SECRET ?? randomBytes(32).toString("base64url");
-
-const WORDS = readFileSync(join(process.cwd(), "data", "wordles.txt"), "utf8")
-  .split(/\r?\n/)
-  .map((word) => word.trim().toUpperCase())
-  .filter((word) => WORD_PATTERN.test(word));
-
-if (WORDS.length === 0) {
-  throw new Error("data/wordles.txt must contain at least one 5-letter A-Z word.");
-}
 
 export type GameMode = "daily" | "practice";
 export type GuessResult = "correct" | "present" | "absent";

@@ -71,6 +71,10 @@ type PracticeResponse = {
   gameToken?: string;
 };
 
+type WordleGameProps = {
+  allowedGuesses: string[];
+};
+
 const initialGameState: GameState = {
   guesses: [],
   currentGuess: "",
@@ -366,8 +370,9 @@ function ShareIcon() {
   );
 }
 
-export function WordleGame() {
+export function WordleGame({ allowedGuesses }: WordleGameProps) {
   const [game, setGame] = useState<GameState>(initialGameState);
+  const [allowedGuessSet] = useState(() => new Set(allowedGuesses));
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(true);
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   const [isStartingPractice, setIsStartingPractice] = useState(false);
@@ -629,6 +634,15 @@ export function WordleGame() {
     }
 
     const submittedGuess = game.currentGuess;
+
+    if (!allowedGuessSet.has(submittedGuess)) {
+      setGame((current) => ({
+        ...current,
+        message: "Not in word list.",
+      }));
+      return;
+    }
+
     submitInFlightRef.current = true;
 
     setGame((current) => ({

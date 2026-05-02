@@ -3,6 +3,7 @@ import {
   type GameTokenPayload,
   getPuzzleForToken,
   getTodaysPuzzle,
+  isAllowedGuess,
   MAX_GUESSES,
   normalizeGuess,
   readGameToken,
@@ -39,6 +40,10 @@ export async function POST(request: Request) {
       { error: "Guess must be exactly 5 A-Z letters." },
       { status: 400 },
     );
+  }
+
+  if (!isAllowedGuess(normalizedGuess)) {
+    return Response.json({ error: "Not in word list." }, { status: 400 });
   }
 
   let tokenPayload: GameTokenPayload | null;

@@ -1,7 +1,10 @@
 import { AuthButton } from "./AuthButton";
 import { WordleGame } from "./WordleGame";
+import { getAllowedGuesses } from "./wordleWords";
 
 export default function Home() {
+  const allowedGuesses = getAllowedGuesses();
+
   return (
     <main className="flex min-h-dvh flex-1 flex-col items-center overflow-x-hidden bg-slate-50 px-[clamp(0.5rem,3vw,0.75rem)] py-4 text-slate-950 sm:px-8 sm:py-6">
       <div className="fixed right-[calc(env(safe-area-inset-right)+1rem)] top-[calc(env(safe-area-inset-top)+1rem)] z-30">
@@ -17,7 +20,7 @@ export default function Home() {
         </h1>
       </header>
 
-      <WordleGame />
+      <WordleGame allowedGuesses={allowedGuesses} />
     </main>
   );
 }
