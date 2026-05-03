@@ -6,8 +6,14 @@ export { getAllowedGuesses, isAllowedGuess, MAX_GUESSES, WORD_PATTERN };
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 const PUZZLE_EPOCH_UTC = Date.UTC(2026, 4, 1);
+
+if (process.env.VERCEL_ENV === "production" && !process.env.WORDLE_TOKEN_SECRET) {
+  throw new Error("WORDLE_TOKEN_SECRET is required in production.");
+}
+
 const TOKEN_SECRET =
-  process.env.WORDLE_TOKEN_SECRET ?? randomBytes(32).toString("base64url");
+  process.env.WORDLE_TOKEN_SECRET ??
+  (process.env.NODE_ENV === "production" ? "" : randomBytes(32).toString("base64url"));
 
 export type GameMode = "daily" | "practice";
 export type GuessResult = "correct" | "present" | "absent";
@@ -31,18 +37,26 @@ export type DailyGameTokenPayload = {
   mode: "daily";
   puzzleNumber: number;
   guessCount: number;
+  gameSessionId?: string;
 };
 
 export type PracticeGameTokenPayload = {
   mode: "practice";
   practiceSeed: string;
   guessCount: number;
+  gameSessionId?: string;
 };
 
 export type GameTokenPayload = DailyGameTokenPayload | PracticeGameTokenPayload;
 
 export function normalizeGuess(guess: string) {
   return guess.trim().toUpperCase();
+}
+
+export function assertWordleTokenSecretConfigured() {
+  if (!TOKEN_SECRET) {
+    throw new Error("WORDLE_TOKEN_SECRET is required in production.");
+  }
 }
 
 export function getTodaysPuzzle(): DailyPuzzle {
@@ -91,10 +105,14 @@ export function getPuzzleForToken(payload: GameTokenPayload): Puzzle {
 }
 
 function signTokenPayload(encodedPayload: string) {
+  assertWordleTokenSecretConfigured();
+
   return createHmac("sha256", TOKEN_SECRET).update(encodedPayload).digest("base64url");
 }
 
 function getPracticeWordIndex(practiceSeed: string) {
+  assertWordleTokenSecretConfigured();
+
   const digest = createHmac("sha256", TOKEN_SECRET).update(practiceSeed).digest();
 
   return digest.readUInt32BE(0) % WORDS.length;
@@ -109,12 +127,17 @@ function createGameToken(payload: GameTokenPayload) {
   return `${encodedPayload}.${signature}`;
 }
 
-export function createGameTokenForPuzzle(puzzle: Puzzle, guessCount: number) {
+export function createGameTokenForPuzzle(
+  puzzle: Puzzle,
+  guessCount: number,
+  gameSessionId?: string,
+) {
   if (puzzle.mode === "practice") {
     return createGameToken({
       mode: "practice",
       practiceSeed: puzzle.practiceSeed,
       guessCount,
+      ...(gameSessionId ? { gameSessionId } : {}),
     });
   }
 
@@ -122,6 +145,7 @@ export function createGameTokenForPuzzle(puzzle: Puzzle, guessCount: number) {
     mode: "daily",
     puzzleNumber: puzzle.puzzleNumber,
     guessCount,
+    ...(gameSessionId ? { gameSessionId } : {}),
   });
 }
 
@@ -142,6 +166,14 @@ function isValidTokenPayload(payload: unknown): payload is GameTokenPayload {
   const tokenPayload = payload as Record<string, unknown>;
 
   if (!hasValidGuessCount(tokenPayload)) {
+    return false;
+  }
+
+  if (
+    tokenPayload.gameSessionId !== undefined &&
+    (typeof tokenPayload.gameSessionId !== "string" ||
+      tokenPayload.gameSessionId.length === 0)
+  ) {
     return false;
   }
 

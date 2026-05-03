@@ -1,5 +1,17 @@
+import { auth } from "@clerk/nextjs/server";
+
+import { hasDatabase } from "../_lib/db";
+import {
+  getCompletedStatus,
+  getOrCreateDailySession,
+  getPracticeSession,
+  recordGuessForSession,
+  type GameSession,
+} from "../_lib/game-storage";
+import { getCurrentPlayerName } from "../_lib/player";
 import {
   createGameTokenForPuzzle,
+  assertWordleTokenSecretConfigured,
   type GameTokenPayload,
   getPuzzleForToken,
   getTodaysPuzzle,
@@ -46,6 +58,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "Not in word list." }, { status: 400 });
   }
 
+  assertWordleTokenSecretConfigured();
+
   let tokenPayload: GameTokenPayload | null;
 
   try {
@@ -57,11 +71,90 @@ export async function POST(request: Request) {
     );
   }
 
-  const puzzle = tokenPayload ? getPuzzleForToken(tokenPayload) : getTodaysPuzzle();
+  const todaysPuzzle = getTodaysPuzzle();
+  const puzzle = tokenPayload ? getPuzzleForToken(tokenPayload) : todaysPuzzle;
+
+  if (puzzle.mode === "daily" && puzzle.puzzleNumber !== todaysPuzzle.puzzleNumber) {
+    return Response.json(
+      { error: "This daily puzzle has ended." },
+      { status: 400 },
+    );
+  }
+
+  const { userId } = await auth();
+  let session: GameSession | null = null;
+
+  if (userId && hasDatabase()) {
+    if (puzzle.mode === "daily") {
+      const playerName = await getCurrentPlayerName();
+      session = await getOrCreateDailySession(
+        userId,
+        playerName,
+        puzzle.puzzleNumber,
+      );
+
+      if (
+        (session.guessCount > 0 && !tokenPayload) ||
+        (tokenPayload &&
+          (tokenPayload.gameSessionId !== session.id ||
+            tokenPayload.guessCount !== session.guessCount))
+      ) {
+        return Response.json(
+          { error: "This game state is out of date. Please refresh and try again." },
+          { status: 409 },
+        );
+      }
+    } else if (tokenPayload?.gameSessionId) {
+      session = await getPracticeSession(userId, tokenPayload.gameSessionId);
+
+      if (!session) {
+        return Response.json(
+          { error: "Practice session was not found." },
+          { status: 400 },
+        );
+      }
+
+      if (tokenPayload.guessCount !== session.guessCount) {
+        return Response.json(
+          { error: "This game state is out of date. Please refresh and try again." },
+          { status: 409 },
+        );
+      }
+    }
+
+    if (session && session.status !== "playing") {
+      return Response.json(
+        { error: "This game has already been completed." },
+        { status: 400 },
+      );
+    }
+  }
+
   const result = scoreGuess(normalizedGuess, puzzle.word);
-  const guessCount = (tokenPayload?.guessCount ?? 0) + 1;
+  const guessCount = session
+    ? session.guessCount + 1
+    : (tokenPayload?.guessCount ?? 0) + 1;
   const won = result.every((letterResult) => letterResult === "correct");
   const lost = !won && guessCount >= MAX_GUESSES;
+  const status = getCompletedStatus(won, lost);
+
+  if (session && userId) {
+    const recorded = await recordGuessForSession({
+      gameSessionId: session.id,
+      userId,
+      guessNumber: guessCount,
+      guess: normalizedGuess,
+      result,
+      status,
+    });
+
+    if (!recorded) {
+      return Response.json(
+        { error: "Unable to record guess. Please refresh and try again." },
+        { status: 409 },
+      );
+    }
+  }
 
   return Response.json({
     guess: normalizedGuess,
@@ -69,6 +162,9 @@ export async function POST(request: Request) {
     ...(won || lost ? { word: puzzle.word } : {}),
     mode: puzzle.mode,
     ...(puzzle.mode === "daily" ? { puzzleNumber: puzzle.puzzleNumber } : {}),
-    gameToken: createGameTokenForPuzzle(puzzle, guessCount),
+    ...(won || lost
+      ? {}
+      : { gameToken: createGameTokenForPuzzle(puzzle, guessCount, session?.id) }),
+    ...(session ? { statsUpdated: true } : {}),
   });
 }

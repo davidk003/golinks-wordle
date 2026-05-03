@@ -1,6 +1,13 @@
 "use client";
 
-import { type CSSProperties, type MouseEvent, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { MAX_GUESSES, WORD_LENGTH } from "./wordleConfig";
 
 const DEFAULT_PUZZLE_NUMBER = 0;
@@ -64,11 +71,48 @@ type GuessResponse = {
   word?: string;
   puzzleNumber?: number;
   gameToken?: string;
+  statsUpdated?: boolean;
 };
 
 type PracticeResponse = {
   mode?: GameMode;
   gameToken?: string;
+};
+
+type DailyGameResponse = {
+  game: {
+    mode: "daily";
+    puzzleNumber: number;
+    status: "playing" | "won" | "lost";
+    guesses: SubmittedGuess[];
+    gameToken?: string;
+    word?: string;
+  } | null;
+};
+
+type ModeStats = {
+  gamesPlayed: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  averageGuesses: number | null;
+  guessDistribution: Record<string, number>;
+  favoriteCharacters: { character: string; count: number }[];
+  currentStreak: number;
+  maxStreak: number;
+};
+
+type StatsResponse = {
+  stats: Record<GameMode, ModeStats>;
+};
+
+type LeaderboardResponse = {
+  puzzleNumber: number;
+  entries: {
+    rank: number;
+    playerName: string;
+    guesses: number;
+  }[];
 };
 
 type WordleGameProps = {
@@ -370,6 +414,121 @@ function ShareIcon() {
   );
 }
 
+function StatCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 text-center shadow-sm">
+      <div className="text-lg font-black text-slate-950">{value}</div>
+      <div className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.16em] text-slate-500">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function StatsModeSection({ title, stats }: { title: string; stats: ModeStats }) {
+  const maxDistributionCount = Math.max(
+    1,
+    ...Object.values(stats.guessDistribution),
+  );
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <h3 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">
+        {title}
+      </h3>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <StatCard label="Played" value={stats.gamesPlayed} />
+        <StatCard label="Wins" value={stats.wins} />
+        <StatCard label="Losses" value={stats.losses} />
+        <StatCard label="Win rate" value={`${stats.winRate}%`} />
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <StatCard label="Avg guesses" value={stats.averageGuesses ?? "-"} />
+        <StatCard label="Current streak" value={stats.currentStreak} />
+        <StatCard label="Max streak" value={stats.maxStreak} />
+      </div>
+      <div className="mt-4 space-y-1.5">
+        <h4 className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">
+          Guess distribution
+        </h4>
+        {Array.from({ length: MAX_GUESSES }, (_, index) => index + 1).map(
+          (guessNumber) => {
+            const count = stats.guessDistribution[String(guessNumber)] ?? 0;
+            const width = `${Math.max(8, (count / maxDistributionCount) * 100)}%`;
+
+            return (
+              <div key={guessNumber} className="flex items-center gap-2 text-xs">
+                <span className="w-3 font-black text-slate-500">{guessNumber}</span>
+                <div className="h-5 flex-1 rounded-sm bg-slate-200">
+                  <div
+                    className="flex h-full items-center justify-end rounded-sm bg-[#6aaa64] px-2 text-[0.65rem] font-black text-white"
+                    style={{ width }}
+                  >
+                    {count}
+                  </div>
+                </div>
+              </div>
+            );
+          },
+        )}
+      </div>
+      <div className="mt-4">
+        <h4 className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">
+          Most-used letters
+        </h4>
+        {stats.favoriteCharacters.length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {stats.favoriteCharacters.map((character) => (
+              <span
+                key={character.character}
+                className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-black text-slate-700"
+              >
+                {character.character} {character.count}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-xs font-semibold text-slate-500">
+            Submit guesses to build this list.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function LeaderboardSection({ leaderboard }: { leaderboard: LeaderboardResponse | null }) {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <h3 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">
+        Daily leaderboard
+      </h3>
+      {leaderboard && leaderboard.entries.length > 0 ? (
+        <ol className="mt-3 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
+          {leaderboard.entries.map((entry) => (
+            <li
+              key={`${entry.rank}-${entry.playerName}-${entry.guesses}`}
+              className="flex items-center gap-3 px-3 py-2 text-sm"
+            >
+              <span className="w-7 font-black text-slate-400">#{entry.rank}</span>
+              <span className="min-w-0 flex-1 truncate font-bold text-slate-700">
+                {entry.playerName}
+              </span>
+              <span className="font-black text-slate-950">
+                {entry.guesses}/{MAX_GUESSES}
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="mt-2 text-xs font-semibold text-slate-500">
+          No leaderboard entries yet for today.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function WordleGame({ allowedGuesses }: WordleGameProps) {
   const [game, setGame] = useState<GameState>(initialGameState);
   const [allowedGuessSet] = useState(() => new Set(allowedGuesses));
@@ -379,10 +538,20 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
   const [shareTooltipMessage, setShareTooltipMessage] = useState<string | null>(
     null,
   );
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isStatsLoading, setIsStatsLoading] = useState(false);
+  const [stats, setStats] = useState<StatsResponse["stats"] | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const submitGuessRef = useRef<() => void>(() => {});
   const pressKeyRef = useRef<(key: string) => void>(() => {});
   const submitInFlightRef = useRef(false);
   const practiceRequestIdRef = useRef(0);
+  const hasRestoredDailyGameRef = useRef(false);
+  const dailyRestoreRequestIdRef = useRef(0);
+  const statsRequestIdRef = useRef(0);
+  const lastStatsRefreshKeyRef = useRef<string | null>(null);
   const hasCelebratedWinRef = useRef(false);
   const winCelebrationIdRef = useRef(0);
   const pressKeyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -419,6 +588,66 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
     enterTileTimeoutsRef.current.clear();
   }
 
+  const refreshStatsPanel = useCallback(async () => {
+    const requestId = statsRequestIdRef.current + 1;
+    statsRequestIdRef.current = requestId;
+    setIsStatsLoading(true);
+    setStatsError(null);
+    setLeaderboardError(null);
+
+    try {
+      const [statsResponse, leaderboardResponse] = await Promise.all([
+        fetch("/api/stats"),
+        fetch("/api/leaderboard/daily"),
+      ]);
+
+      let nextStats: StatsResponse["stats"] | null = null;
+      let nextStatsError: string | null = null;
+      let nextLeaderboard: LeaderboardResponse | null = null;
+      let nextLeaderboardError: string | null = null;
+
+      if (statsResponse.ok) {
+        const data = (await statsResponse.json()) as StatsResponse;
+        nextStats = data.stats;
+      } else {
+        const data = await statsResponse.json().catch(() => ({}));
+        nextStats = null;
+        nextStatsError =
+          typeof data.error === "string"
+            ? data.error
+            : "Unable to load stats.";
+      }
+
+      if (leaderboardResponse.ok) {
+        const data = (await leaderboardResponse.json()) as LeaderboardResponse;
+        nextLeaderboard = data;
+      } else {
+        const data = await leaderboardResponse.json().catch(() => ({}));
+        nextLeaderboard = null;
+        nextLeaderboardError =
+          typeof data.error === "string"
+            ? data.error
+            : "Unable to load leaderboard.";
+      }
+
+      if (statsRequestIdRef.current === requestId) {
+        setStats(nextStats);
+        setStatsError(nextStatsError);
+        setLeaderboard(nextLeaderboard);
+        setLeaderboardError(nextLeaderboardError);
+      }
+    } catch {
+      if (statsRequestIdRef.current === requestId) {
+        setStatsError("Unable to load stats.");
+        setLeaderboardError("Unable to load leaderboard.");
+      }
+    } finally {
+      if (statsRequestIdRef.current === requestId) {
+        setIsStatsLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     const enterTileTimeouts = enterTileTimeoutsRef.current;
 
@@ -440,6 +669,81 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
       enterTileTimeouts.forEach((timeout) => clearTimeout(timeout));
       enterTileTimeouts.clear();
     };
+  }, []);
+
+  useEffect(() => {
+    if (hasRestoredDailyGameRef.current) {
+      return;
+    }
+
+    hasRestoredDailyGameRef.current = true;
+    const requestId = dailyRestoreRequestIdRef.current + 1;
+    dailyRestoreRequestIdRef.current = requestId;
+
+    async function restoreDailyGame() {
+      try {
+        const response = await fetch("/api/game/daily");
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as DailyGameResponse;
+
+        if (dailyRestoreRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        const restoredGame = data.game;
+
+        if (!restoredGame || restoredGame.guesses.length === 0) {
+          return;
+        }
+
+        setGame((current) => {
+          if (dailyRestoreRequestIdRef.current !== requestId) {
+            return current;
+          }
+
+          if (
+            current.mode !== "daily" ||
+            current.guesses.length > 0 ||
+            current.currentGuess.length > 0 ||
+            current.status !== "playing" ||
+            current.isSubmitting
+          ) {
+            return current;
+          }
+
+          if (restoredGame.status === "won") {
+            hasCelebratedWinRef.current = true;
+          }
+
+          const lostMessage = restoredGame.word
+            ? `No guesses left. The word was ${restoredGame.word}.`
+            : "No guesses left.";
+
+          return {
+            ...initialGameState,
+            guesses: restoredGame.guesses,
+            mode: "daily",
+            puzzleNumber: restoredGame.puzzleNumber,
+            gameToken: restoredGame.gameToken,
+            status: restoredGame.status,
+            message:
+              restoredGame.status === "won"
+                ? "You won! Reset the board to play again."
+                : restoredGame.status === "lost"
+                  ? lostMessage
+                  : "Daily game restored. Keep going.",
+          };
+        });
+      } catch {
+        // Restore is best-effort; a failed request should not block play.
+      }
+    }
+
+    void restoreDailyGame();
   }, []);
 
   useEffect(() => {
@@ -553,6 +857,36 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
       );
     };
   }, [game.guesses.length, game.status]);
+
+  useEffect(() => {
+    if (!isStatsOpen || stats || isStatsLoading) {
+      return;
+    }
+
+    void refreshStatsPanel();
+  }, [isStatsLoading, isStatsOpen, refreshStatsPanel, stats]);
+
+  useEffect(() => {
+    if (!isStatsOpen || game.status === "playing") {
+      return;
+    }
+
+    const refreshKey = `${game.mode}:${game.puzzleNumber}:${game.status}:${game.guesses.length}`;
+
+    if (lastStatsRefreshKeyRef.current === refreshKey) {
+      return;
+    }
+
+    lastStatsRefreshKeyRef.current = refreshKey;
+    void refreshStatsPanel();
+  }, [
+    game.guesses.length,
+    game.mode,
+    game.puzzleNumber,
+    game.status,
+    isStatsOpen,
+    refreshStatsPanel,
+  ]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -751,9 +1085,15 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
     }, 1600);
   }
 
+  function handleToggleStats(event: MouseEvent<HTMLButtonElement>) {
+    event.currentTarget.blur();
+    setIsStatsOpen((current) => !current);
+  }
+
   function handleReset(event: MouseEvent<HTMLButtonElement>) {
     event.currentTarget.blur();
     practiceRequestIdRef.current += 1;
+    dailyRestoreRequestIdRef.current += 1;
     setIsStartingPractice(false);
     clearEnterTileTimeouts();
     cancelWinConfetti(
@@ -781,6 +1121,7 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
 
     const requestId = practiceRequestIdRef.current + 1;
     practiceRequestIdRef.current = requestId;
+    dailyRestoreRequestIdRef.current += 1;
     clearEnterTileTimeouts();
     cancelWinConfetti(
       winConfettiTimeoutRef,
@@ -980,8 +1321,72 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
           >
             {isStartingPractice ? "Starting..." : "New practice"}
           </button>
+          <button
+            type="button"
+            onClick={handleToggleStats}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-slate-400 hover:text-slate-900"
+            aria-expanded={isStatsOpen}
+            aria-controls="wordle-stats-panel"
+          >
+            {isStatsOpen ? "Hide stats" : "Stats"}
+          </button>
         </div>
       </div>
+
+      {isStatsOpen ? (
+        <div
+          id="wordle-stats-panel"
+          role="region"
+          aria-label="Stats and leaderboard"
+          className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-black text-slate-950">Stats</h2>
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                Signed-in games are tracked separately for daily and practice.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void refreshStatsPanel()}
+              disabled={isStatsLoading}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isStatsLoading ? "Loading" : "Refresh"}
+            </button>
+          </div>
+
+          <div aria-live="polite">
+            {statsError ? (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                {statsError}
+              </p>
+            ) : null}
+
+            {leaderboardError ? (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                {leaderboardError}
+              </p>
+            ) : null}
+          </div>
+
+          {stats ? (
+            <div className="mt-4 space-y-4">
+              <StatsModeSection title="Daily" stats={stats.daily} />
+              <StatsModeSection title="Practice" stats={stats.practice} />
+            </div>
+          ) : !statsError ? (
+            <p className="mt-4 text-sm font-semibold text-slate-500" aria-live="polite">
+              {isStatsLoading ? "Loading stats..." : "Open stats to load your records."}
+            </p>
+          ) : null}
+
+          <div className="mt-4">
+            <LeaderboardSection leaderboard={leaderboard} />
+          </div>
+        </div>
+      ) : null}
 
       {isKeyboardVisible ? (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-slate-50/95 pb-[calc(env(safe-area-inset-bottom)+clamp(0.35rem,1.5dvh,0.75rem))] pl-[max(0.125rem,env(safe-area-inset-left))] pr-[max(0.125rem,env(safe-area-inset-right))] pt-[clamp(0.25rem,1.2dvh,0.5rem)] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur sm:px-3">
