@@ -32,7 +32,7 @@ export async function GET() {
       SUM(${MAX_GUESSES + 1} - guess_count) AS points,
       COUNT(*) AS wins
     FROM game_sessions
-    WHERE mode = 'daily'
+    WHERE mode = 'practice'
       AND status = 'won'
     GROUP BY user_id
     ORDER BY points DESC, wins DESC, MAX(completed_at) ASC, user_id ASC

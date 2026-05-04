@@ -107,11 +107,11 @@ type StatsResponse = {
 };
 
 type LeaderboardResponse = {
-  puzzleNumber: number;
   entries: {
     rank: number;
     playerName: string;
-    guesses: number;
+    points: number;
+    wins: number;
   }[];
 };
 
@@ -497,32 +497,72 @@ function StatsModeSection({ title, stats }: { title: string; stats: ModeStats })
   );
 }
 
-function LeaderboardSection({ leaderboard }: { leaderboard: LeaderboardResponse | null }) {
+function ScoreInfoTooltip({ tooltipId }: { tooltipId: string }) {
+  return (
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        aria-label="Leaderboard scoring"
+        aria-describedby={tooltipId}
+        className="flex size-5 items-center justify-center rounded-full border border-slate-300 bg-white text-[0.65rem] font-black leading-none text-slate-500 transition hover:border-[#6aaa64] hover:text-[#6aaa64] focus:outline-none focus:ring-2 focus:ring-[#6aaa64]/35"
+      >
+        i
+      </button>
+      <span
+        id={tooltipId}
+        role="tooltip"
+        className="pointer-events-none absolute right-0 top-full z-10 mt-2 w-56 rounded-lg bg-slate-950 p-3 text-xs font-semibold normal-case tracking-normal text-white opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100"
+      >
+        Scoring: 6 pts for solving in 1 guess, down to 1 pt for solving in 6.
+      </span>
+    </span>
+  );
+}
+
+function LeaderboardSection({
+  title,
+  leaderboard,
+  emptyMessage,
+  tooltipId,
+}: {
+  title: string;
+  leaderboard: LeaderboardResponse | null;
+  emptyMessage: string;
+  tooltipId: string;
+}) {
   return (
     <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <h3 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">
-        Daily leaderboard
-      </h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">
+          {title}
+        </h3>
+        <ScoreInfoTooltip tooltipId={tooltipId} />
+      </div>
       {leaderboard && leaderboard.entries.length > 0 ? (
         <ol className="mt-3 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
           {leaderboard.entries.map((entry) => (
             <li
-              key={`${entry.rank}-${entry.playerName}-${entry.guesses}`}
+              key={`${entry.rank}-${entry.playerName}-${entry.points}-${entry.wins}`}
               className="flex items-center gap-3 px-3 py-2 text-sm"
             >
               <span className="w-7 font-black text-slate-400">#{entry.rank}</span>
               <span className="min-w-0 flex-1 truncate font-bold text-slate-700">
                 {entry.playerName}
               </span>
-              <span className="font-black text-slate-950">
-                {entry.guesses}/{MAX_GUESSES}
+              <span className="text-right">
+                <span className="block font-black text-slate-950">
+                  {entry.points} pts
+                </span>
+                <span className="block text-[0.65rem] font-bold uppercase tracking-[0.12em] text-slate-400">
+                  {entry.wins} {entry.wins === 1 ? "win" : "wins"}
+                </span>
               </span>
             </li>
           ))}
         </ol>
       ) : (
         <p className="mt-2 text-xs font-semibold text-slate-500">
-          No leaderboard entries yet for today.
+          {emptyMessage}
         </p>
       )}
     </section>
@@ -541,7 +581,10 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isStatsLoading, setIsStatsLoading] = useState(false);
   const [stats, setStats] = useState<StatsResponse["stats"] | null>(null);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
+  const [dailyLeaderboard, setDailyLeaderboard] =
+    useState<LeaderboardResponse | null>(null);
+  const [practiceLeaderboard, setPracticeLeaderboard] =
+    useState<LeaderboardResponse | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const submitGuessRef = useRef<() => void>(() => {});
@@ -596,14 +639,17 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
     setLeaderboardError(null);
 
     try {
-      const [statsResponse, leaderboardResponse] = await Promise.all([
-        fetch("/api/stats"),
-        fetch("/api/leaderboard/daily"),
-      ]);
+      const [statsResponse, dailyLeaderboardResponse, practiceLeaderboardResponse] =
+        await Promise.all([
+          fetch("/api/stats"),
+          fetch("/api/leaderboard/daily"),
+          fetch("/api/leaderboard/practice"),
+        ]);
 
       let nextStats: StatsResponse["stats"] | null = null;
       let nextStatsError: string | null = null;
-      let nextLeaderboard: LeaderboardResponse | null = null;
+      let nextDailyLeaderboard: LeaderboardResponse | null = null;
+      let nextPracticeLeaderboard: LeaderboardResponse | null = null;
       let nextLeaderboardError: string | null = null;
 
       if (statsResponse.ok) {
@@ -618,13 +664,23 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
             : "Unable to load stats.";
       }
 
-      if (leaderboardResponse.ok) {
-        const data = (await leaderboardResponse.json()) as LeaderboardResponse;
-        nextLeaderboard = data;
+      if (dailyLeaderboardResponse.ok) {
+        const data = (await dailyLeaderboardResponse.json()) as LeaderboardResponse;
+        nextDailyLeaderboard = data;
       } else {
-        const data = await leaderboardResponse.json().catch(() => ({}));
-        nextLeaderboard = null;
+        const data = await dailyLeaderboardResponse.json().catch(() => ({}));
         nextLeaderboardError =
+          typeof data.error === "string"
+            ? data.error
+            : "Unable to load leaderboard.";
+      }
+
+      if (practiceLeaderboardResponse.ok) {
+        const data = (await practiceLeaderboardResponse.json()) as LeaderboardResponse;
+        nextPracticeLeaderboard = data;
+      } else {
+        const data = await practiceLeaderboardResponse.json().catch(() => ({}));
+        nextLeaderboardError ??=
           typeof data.error === "string"
             ? data.error
             : "Unable to load leaderboard.";
@@ -633,7 +689,8 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
       if (statsRequestIdRef.current === requestId) {
         setStats(nextStats);
         setStatsError(nextStatsError);
-        setLeaderboard(nextLeaderboard);
+        setDailyLeaderboard(nextDailyLeaderboard);
+        setPracticeLeaderboard(nextPracticeLeaderboard);
         setLeaderboardError(nextLeaderboardError);
       }
     } catch {
@@ -859,28 +916,39 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
   }, [game.guesses.length, game.status]);
 
   useEffect(() => {
-    if (!isStatsOpen || stats || isStatsLoading) {
+    if (!isStatsOpen || stats || statsError || isStatsLoading) {
       return;
     }
 
     void refreshStatsPanel();
-  }, [isStatsLoading, isStatsOpen, refreshStatsPanel, stats]);
+  }, [isStatsLoading, isStatsOpen, refreshStatsPanel, stats, statsError]);
 
   useEffect(() => {
-    if (!isStatsOpen || game.status === "playing") {
+    if (game.status === "playing") {
       return;
     }
 
-    const refreshKey = `${game.mode}:${game.puzzleNumber}:${game.status}:${game.guesses.length}`;
+    const refreshKey = `${game.mode}:${game.gameToken ?? game.puzzleNumber}:${game.status}:${game.guesses.length}`;
 
     if (lastStatsRefreshKeyRef.current === refreshKey) {
       return;
     }
 
     lastStatsRefreshKeyRef.current = refreshKey;
+
+    if (!isStatsOpen) {
+      setStats(null);
+      setDailyLeaderboard(null);
+      setPracticeLeaderboard(null);
+      setStatsError(null);
+      setLeaderboardError(null);
+      return;
+    }
+
     void refreshStatsPanel();
   }, [
     game.guesses.length,
+    game.gameToken,
     game.mode,
     game.puzzleNumber,
     game.status,
@@ -1383,7 +1451,20 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
           ) : null}
 
           <div className="mt-4">
-            <LeaderboardSection leaderboard={leaderboard} />
+            <div className="space-y-4">
+              <LeaderboardSection
+                title="Daily leaderboard"
+                leaderboard={dailyLeaderboard}
+                emptyMessage="No daily leaderboard entries yet."
+                tooltipId="daily-leaderboard-scoring-tooltip"
+              />
+              <LeaderboardSection
+                title="Overall practice leaderboard"
+                leaderboard={practiceLeaderboard}
+                emptyMessage="No practice leaderboard entries yet."
+                tooltipId="practice-leaderboard-scoring-tooltip"
+              />
+            </div>
           </div>
         </div>
       ) : null}

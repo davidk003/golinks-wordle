@@ -32,6 +32,18 @@ CREATE INDEX IF NOT EXISTS game_sessions_daily_leaderboard_idx
   ON game_sessions (puzzle_number, guess_count, completed_at)
   WHERE mode = 'daily' AND status = 'won';
 
+CREATE INDEX IF NOT EXISTS game_sessions_daily_points_leaderboard_idx
+  ON game_sessions (user_id, completed_at)
+  WHERE mode = 'daily' AND status = 'won';
+
+CREATE INDEX IF NOT EXISTS game_sessions_practice_leaderboard_idx
+  ON game_sessions (guess_count, completed_at, id)
+  WHERE mode = 'practice' AND status = 'won';
+
+CREATE INDEX IF NOT EXISTS game_sessions_practice_points_leaderboard_idx
+  ON game_sessions (user_id, completed_at)
+  WHERE mode = 'practice' AND status = 'won';
+
 CREATE TABLE IF NOT EXISTS game_guesses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   game_session_id uuid NOT NULL REFERENCES game_sessions (id) ON DELETE CASCADE,
