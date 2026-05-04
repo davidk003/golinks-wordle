@@ -14,6 +14,9 @@
   --accent-text: #3f7d38;
   --tile-empty-bg: #ffffff;
   --tile-empty-border: #d3d6da;
+  --tile-active-bg: #787c7e;
+  --tile-active-border: #787c7e;
+  --tile-active-text: #ffffff;
   --keyboard-key-bg: #d3d6da;
   --keyboard-key-text: #000000;
   --tooltip-bg: rgb(2 6 23 / 0.9);
@@ -44,6 +47,9 @@ html[data-theme="dark"] {
   --accent-text: #8ccf83;
   --tile-empty-bg: #0f172a;
   --tile-empty-border: #475569;
+  --tile-active-bg: #475569;
+  --tile-active-border: #64748b;
+  --tile-active-text: #ffffff;
   --keyboard-key-bg: #334155;
   --keyboard-key-text: #f8fafc;
   --tooltip-bg: rgb(2 6 23 / 0.95);
@@ -79,32 +85,32 @@ html[data-theme="dark"] .theme-toggle-moon {
   display: block;
 }
 
+.wordle-tile-result-letter {
+  color: #ffffff;
+}
+
 @keyframes wordle-tile-reveal {
   0% {
     background-color: var(--tile-empty-bg);
     border-color: var(--tile-empty-border);
-    color: var(--foreground);
     transform: rotateX(0deg);
   }
 
   49% {
     background-color: var(--tile-empty-bg);
     border-color: var(--tile-empty-border);
-    color: var(--foreground);
     transform: rotateX(90deg);
   }
 
   50% {
     background-color: var(--tile-result-color);
     border-color: var(--tile-result-color);
-    color: #020617;
     transform: rotateX(90deg);
   }
 
   100% {
     background-color: var(--tile-result-color);
     border-color: var(--tile-result-color);
-    color: #020617;
     transform: rotateX(0deg);
   }
 }
@@ -176,7 +182,6 @@ html[data-theme="dark"] .theme-toggle-moon {
     animation: none;
     background-color: var(--tile-result-color);
     border-color: var(--tile-result-color);
-    color: #020617;
     transform: none;
   }
 

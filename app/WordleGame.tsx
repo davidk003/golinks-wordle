@@ -132,9 +132,9 @@ const initialGameState: GameState = {
 };
 
 const resultClassNames: Record<GuessResult, string> = {
-  correct: "border-[#6aaa64] bg-[#6aaa64] text-[#020617]",
-  present: "border-[#c9b458] bg-[#c9b458] text-[#020617]",
-  absent: "border-[#787c7e] bg-[#787c7e] text-[#020617]",
+  correct: "border-[#6aaa64] bg-[#6aaa64] text-white",
+  present: "border-[#c9b458] bg-[#c9b458] text-white",
+  absent: "border-[#787c7e] bg-[#787c7e] text-white",
 };
 
 const resultColors: Record<GuessResult, string> = {
@@ -247,13 +247,19 @@ function isModifiedKeyboardEvent(event: KeyboardEvent) {
   );
 }
 
-function getTileClassName(result?: GuessResult, isEntering = false) {
+function getTileClassName(
+  result: GuessResult | undefined,
+  hasLetter: boolean,
+  isEntering = false,
+) {
+  const emptyTileClassName = hasLetter
+    ? "border-[var(--tile-active-border)] bg-[var(--tile-active-bg)] text-[var(--tile-active-text)]"
+    : "border-[var(--tile-empty-border)] bg-[var(--tile-empty-bg)] text-[var(--foreground)]";
+
   return `flex size-[clamp(2rem,min(15vw,6.2dvh),3.35rem)] items-center justify-center border-2 text-[clamp(1.05rem,6.3vw,1.5rem)] font-black uppercase leading-none ${
     result
       ? `${resultClassNames[result]} wordle-tile-reveal`
-      : `border-[var(--tile-empty-border)] bg-[var(--tile-empty-bg)] text-[var(--foreground)] ${
-          isEntering ? "wordle-tile-enter" : ""
-        }`
+      : `${emptyTileClassName} ${isEntering ? "wordle-tile-enter" : ""}`
   }`;
 }
 
@@ -1358,10 +1364,16 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
                   tileRefs.current[rowIndex] ??= [];
                   tileRefs.current[rowIndex][columnIndex] = node;
                 }}
-                className={getTileClassName(result, Boolean(enteringTile))}
+                className={getTileClassName(
+                  result,
+                  Boolean(letter),
+                  Boolean(enteringTile),
+                )}
                 style={getTileStyle(result, columnIndex)}
               >
-                {letter}
+                <span className={result ? "wordle-tile-result-letter" : undefined}>
+                  {letter}
+                </span>
               </div>
             );
           }),
