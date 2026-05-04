@@ -1,5 +1,6 @@
 "use client";
 
+import { useUser } from "@clerk/nextjs";
 import {
   type CSSProperties,
   type MouseEvent,
@@ -17,6 +18,8 @@ const TILE_REVEAL_STAGGER_MS = 180;
 const WIN_CONFETTI_DELAY_MS =
   TILE_REVEAL_DURATION_MS / 2 + TILE_REVEAL_STAGGER_MS;
 const WIN_CONFETTI_COLORS = ["#6aaa64", "#c9b458", "#787c7e", "#ffffff"];
+const GUEST_DAILY_ATTEMPT_KEY = "golinks-wordle-guest-daily-attempt";
+const PRACTICE_NUDGE_DURATION_MS = 620;
 
 type TimeoutRef = {
   current: ReturnType<typeof setTimeout> | null;
@@ -80,6 +83,7 @@ type PracticeResponse = {
 };
 
 type DailyGameResponse = {
+  puzzleNumber?: number;
   game: {
     mode: "daily";
     puzzleNumber: number;
@@ -88,6 +92,16 @@ type DailyGameResponse = {
     gameToken?: string;
     word?: string;
   } | null;
+};
+
+type GuestDailyAttempt = {
+  version: 1;
+  mode: "daily";
+  puzzleNumber: number;
+  status: GameState["status"];
+  guessCount: number;
+  attemptedAt: string;
+  updatedAt: string;
 };
 
 type ModeStats = {
@@ -167,6 +181,91 @@ function sanitizeGuess(value: string) {
 
 function canEditGuess(game: GameState) {
   return game.status === "playing" && !game.isSubmitting;
+}
+
+function isGameStatus(value: unknown): value is GameState["status"] {
+  return value === "playing" || value === "won" || value === "lost";
+}
+
+function isGuestDailyAttempt(value: unknown): value is GuestDailyAttempt {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const attempt = value as Record<string, unknown>;
+
+  return (
+    attempt.version === 1 &&
+    attempt.mode === "daily" &&
+    typeof attempt.puzzleNumber === "number" &&
+    Number.isInteger(attempt.puzzleNumber) &&
+    isGameStatus(attempt.status) &&
+    typeof attempt.guessCount === "number" &&
+    Number.isInteger(attempt.guessCount) &&
+    attempt.guessCount > 0 &&
+    attempt.guessCount <= MAX_GUESSES &&
+    typeof attempt.attemptedAt === "string" &&
+    typeof attempt.updatedAt === "string"
+  );
+}
+
+function readGuestDailyAttempt() {
+  try {
+    const savedAttempt = localStorage.getItem(GUEST_DAILY_ATTEMPT_KEY);
+
+    if (!savedAttempt) {
+      return null;
+    }
+
+    const parsedAttempt: unknown = JSON.parse(savedAttempt);
+
+    return isGuestDailyAttempt(parsedAttempt) ? parsedAttempt : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveGuestDailyAttempt(attempt: GuestDailyAttempt) {
+  try {
+    localStorage.setItem(GUEST_DAILY_ATTEMPT_KEY, JSON.stringify(attempt));
+  } catch {
+    // Gameplay can continue if storage is unavailable; this is a soft guest lock.
+  }
+}
+
+function getGuestDailyAttemptMessage(attempt: GuestDailyAttempt) {
+  const rowLabel = attempt.guessCount === 1 ? "1 row" : `${attempt.guessCount} rows`;
+
+  return `You've already tried today's Wordle (${rowLabel}). Come back tomorrow or play practice.`;
+}
+
+function getGuestDailyAttemptForPuzzle(puzzleNumber: number) {
+  const attempt = readGuestDailyAttempt();
+
+  return attempt?.puzzleNumber === puzzleNumber ? attempt : null;
+}
+
+function createGuestDailyAttempt({
+  puzzleNumber,
+  status,
+  guessCount,
+}: {
+  puzzleNumber: number;
+  status: GameState["status"];
+  guessCount: number;
+}): GuestDailyAttempt {
+  const existingAttempt = getGuestDailyAttemptForPuzzle(puzzleNumber);
+  const now = new Date().toISOString();
+
+  return {
+    version: 1,
+    mode: "daily",
+    puzzleNumber,
+    status,
+    guessCount,
+    attemptedAt: existingAttempt?.attemptedAt ?? now,
+    updatedAt: now,
+  };
 }
 
 function addLetterToGuess(game: GameState, letter: string): GameState {
@@ -576,8 +675,12 @@ function LeaderboardSection({
 }
 
 export function WordleGame({ allowedGuesses }: WordleGameProps) {
+  const { isLoaded: isAuthLoaded, isSignedIn } = useUser();
   const [game, setGame] = useState<GameState>(initialGameState);
   const [allowedGuessSet] = useState(() => new Set(allowedGuesses));
+  const [guestDailyAttempt, setGuestDailyAttempt] =
+    useState<GuestDailyAttempt | null>(null);
+  const [isPracticeNudged, setIsPracticeNudged] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(true);
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   const [isStartingPractice, setIsStartingPractice] = useState(false);
@@ -595,6 +698,7 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const submitGuessRef = useRef<() => void>(() => {});
   const pressKeyRef = useRef<(key: string) => void>(() => {});
+  const isGuestDailyAttemptBlockedRef = useRef(false);
   const submitInFlightRef = useRef(false);
   const practiceRequestIdRef = useRef(0);
   const hasRestoredDailyGameRef = useRef(false);
@@ -607,6 +711,8 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
   const shareTooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const practiceNudgeAnimationFrameRef = useRef<number | null>(null);
+  const practiceNudgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const winConfettiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -615,6 +721,14 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
     Map<number, ReturnType<typeof setTimeout>>
   >(new Map());
   const tileRefs = useRef<(HTMLDivElement | null)[][]>([]);
+  const isGuestDailyAttemptBlocked =
+    isAuthLoaded &&
+    isSignedIn === false &&
+    game.mode === "daily" &&
+    guestDailyAttempt?.puzzleNumber === game.puzzleNumber &&
+    game.guesses.length === 0;
+
+  isGuestDailyAttemptBlockedRef.current = isGuestDailyAttemptBlocked;
 
   pressKeyRef.current = (key: string) => {
     const normalizedKey = key.length === 1 ? key.toUpperCase() : key;
@@ -636,6 +750,27 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
     enterTileTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
     enterTileTimeoutsRef.current.clear();
   }
+
+  const nudgePracticeButton = useCallback(() => {
+    if (practiceNudgeAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(practiceNudgeAnimationFrameRef.current);
+    }
+
+    if (practiceNudgeTimeoutRef.current) {
+      clearTimeout(practiceNudgeTimeoutRef.current);
+    }
+
+    setIsPracticeNudged(false);
+
+    practiceNudgeAnimationFrameRef.current = requestAnimationFrame(() => {
+      practiceNudgeAnimationFrameRef.current = null;
+      setIsPracticeNudged(true);
+      practiceNudgeTimeoutRef.current = setTimeout(() => {
+        setIsPracticeNudged(false);
+        practiceNudgeTimeoutRef.current = null;
+      }, PRACTICE_NUDGE_DURATION_MS);
+    });
+  }, []);
 
   const refreshStatsPanel = useCallback(async () => {
     const requestId = statsRequestIdRef.current + 1;
@@ -723,6 +858,14 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
         clearTimeout(shareTooltipTimeoutRef.current);
       }
 
+      if (practiceNudgeAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(practiceNudgeAnimationFrameRef.current);
+      }
+
+      if (practiceNudgeTimeoutRef.current) {
+        clearTimeout(practiceNudgeTimeoutRef.current);
+      }
+
       cancelWinConfetti(
         winConfettiTimeoutRef,
         winCelebrationIdRef,
@@ -732,10 +875,10 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
       enterTileTimeouts.forEach((timeout) => clearTimeout(timeout));
       enterTileTimeouts.clear();
     };
-  }, []);
+  }, [nudgePracticeButton]);
 
   useEffect(() => {
-    if (hasRestoredDailyGameRef.current) {
+    if (!isAuthLoaded || hasRestoredDailyGameRef.current) {
       return;
     }
 
@@ -758,8 +901,46 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
         }
 
         const restoredGame = data.game;
+        const puzzleNumber =
+          typeof data.puzzleNumber === "number" && Number.isInteger(data.puzzleNumber)
+            ? data.puzzleNumber
+            : restoredGame?.puzzleNumber;
+
+        if (typeof puzzleNumber !== "number") {
+          return;
+        }
+
+        if (isSignedIn === false) {
+          const attempt = getGuestDailyAttemptForPuzzle(puzzleNumber);
+
+          setGuestDailyAttempt(attempt);
+
+          if (attempt) {
+            setGame((current) => {
+              if (current.mode !== "daily" || current.isSubmitting) {
+                return current;
+              }
+
+              return {
+                ...initialGameState,
+                puzzleNumber,
+                message: getGuestDailyAttemptMessage(attempt),
+              };
+            });
+            return;
+          }
+        } else {
+          setGuestDailyAttempt(null);
+        }
 
         if (!restoredGame || restoredGame.guesses.length === 0) {
+          setGame((current) => {
+            if (current.mode !== "daily" || current.puzzleNumber !== DEFAULT_PUZZLE_NUMBER) {
+              return current;
+            }
+
+            return { ...current, puzzleNumber };
+          });
           return;
         }
 
@@ -807,7 +988,7 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
     }
 
     void restoreDailyGame();
-  }, []);
+  }, [isAuthLoaded, isSignedIn]);
 
   useEffect(() => {
     const enterTileTimeouts = enterTileTimeoutsRef.current;
@@ -968,6 +1149,15 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
         return;
       }
 
+      if (
+        isGuestDailyAttemptBlockedRef.current &&
+        (/^[a-z]$/i.test(event.key) || event.key === "Backspace" || event.key === "Enter")
+      ) {
+        event.preventDefault();
+        nudgePracticeButton();
+        return;
+      }
+
       if (/^[a-z]$/i.test(event.key)) {
         event.preventDefault();
         pressKeyRef.current(event.key);
@@ -996,7 +1186,7 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
     window.addEventListener("keydown", handleKeyDown);
 
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [nudgePracticeButton]);
 
   const rows = Array.from({ length: MAX_GUESSES }, (_, rowIndex) => {
     if (game.guesses[rowIndex]) {
@@ -1030,6 +1220,25 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
 
   async function submitCurrentGuess() {
     if (game.status !== "playing" || game.isSubmitting || submitInFlightRef.current) {
+      return;
+    }
+
+    if (game.mode === "daily" && !isAuthLoaded) {
+      setGame((current) => ({
+        ...current,
+        message: "Loading account state. Please try again in a moment.",
+      }));
+      return;
+    }
+
+    if (isGuestDailyAttemptBlocked && guestDailyAttempt) {
+      nudgePracticeButton();
+      setGame((current) => ({
+        ...current,
+        currentGuess: "",
+        enteringTiles: [],
+        message: getGuestDailyAttemptMessage(guestDailyAttempt),
+      }));
       return;
     }
 
@@ -1078,6 +1287,34 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
       }
 
       const guessResult = data as GuessResponse;
+      const submittedWon = guessResult.result.every((result) => result === "correct");
+      const submittedGuessCount = game.guesses.length + 1;
+      const submittedLost = !submittedWon && submittedGuessCount === MAX_GUESSES;
+      const submittedStatus: GameState["status"] = submittedWon
+        ? "won"
+        : submittedLost
+          ? "lost"
+          : "playing";
+      const submittedMode =
+        guessResult.mode === "daily" || guessResult.mode === "practice"
+          ? guessResult.mode
+          : game.mode;
+      const submittedPuzzleNumber =
+        typeof guessResult.puzzleNumber === "number" &&
+        Number.isInteger(guessResult.puzzleNumber)
+          ? guessResult.puzzleNumber
+          : game.puzzleNumber;
+
+      if (isAuthLoaded && isSignedIn === false && submittedMode === "daily") {
+        const attempt = createGuestDailyAttempt({
+          puzzleNumber: submittedPuzzleNumber,
+          status: submittedStatus,
+          guessCount: submittedGuessCount,
+        });
+
+        saveGuestDailyAttempt(attempt);
+        setGuestDailyAttempt(attempt);
+      }
 
       setGame((current) => {
         if (!current.isSubmitting || current.currentGuess !== submittedGuess) {
@@ -1183,7 +1420,20 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
     }
 
     setShareTooltipMessage(null);
-    setGame(initialGameState);
+
+    if (isAuthLoaded && isSignedIn === false && guestDailyAttempt) {
+      nudgePracticeButton();
+    }
+
+    setGame(
+      isAuthLoaded && isSignedIn === false && guestDailyAttempt
+        ? {
+            ...initialGameState,
+            puzzleNumber: guestDailyAttempt.puzzleNumber,
+            message: getGuestDailyAttemptMessage(guestDailyAttempt),
+          }
+        : initialGameState,
+    );
   }
 
   async function handleStartPractice(event: MouseEvent<HTMLButtonElement>) {
@@ -1287,6 +1537,11 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
 
   function handleKeyboardPress(key: string) {
     pressKeyRef.current(key);
+
+    if (isGuestDailyAttemptBlocked) {
+      nudgePracticeButton();
+      return;
+    }
 
     if (key === "ENTER") {
       void submitCurrentGuess();
@@ -1397,7 +1652,7 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
             type="button"
             onClick={handleStartPractice}
             disabled={game.isSubmitting || isStartingPractice}
-            className="rounded-md border border-[#6aaa64] bg-[#6aaa64] px-4 py-2 text-sm font-bold text-[#020617] transition hover:border-[#5b9956] hover:bg-[#5b9956] disabled:cursor-not-allowed disabled:opacity-60"
+            className={`${isPracticeNudged ? "practice-button-nudge" : ""} rounded-md border border-[#6aaa64] bg-[#6aaa64] px-4 py-2 text-sm font-bold text-[#020617] transition hover:border-[#5b9956] hover:bg-[#5b9956] disabled:cursor-not-allowed disabled:opacity-60`}
           >
             {isStartingPractice ? "Starting..." : "New practice"}
           </button>
@@ -1502,13 +1757,16 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
                     key={key}
                     type="button"
                     onClick={() => handleKeyboardPress(key)}
-                    disabled={game.status !== "playing" || game.isSubmitting}
+                    disabled={
+                      game.status !== "playing" || game.isSubmitting
+                    }
+                    aria-disabled={isGuestDailyAttemptBlocked || undefined}
                     aria-label={key === "BACKSPACE" ? "Backspace" : key}
-                    className={getKeyboardKeyClassName(
+                    className={`${getKeyboardKeyClassName(
                       key,
                       key.length === 1 ? keyboardStatuses[key] : undefined,
                       pressedKey === key,
-                    )}
+                    )} ${isGuestDailyAttemptBlocked ? "cursor-not-allowed opacity-60" : ""}`}
                   >
                     {key === "BACKSPACE" ? "⌫" : key}
                   </button>
