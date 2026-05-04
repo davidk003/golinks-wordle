@@ -1,6 +1,6 @@
 # GoLinks Wordle
 
-A Wordle-style game for guessing internal go links.
+A Wordle clone.
 
 ## Quick Setup
 
