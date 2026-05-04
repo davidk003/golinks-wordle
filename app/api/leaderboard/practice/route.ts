@@ -1,12 +1,13 @@
 import { auth } from "@clerk/nextjs/server";
 
 import { getSql, hasDatabase } from "../../_lib/db";
+import { getUsernamesById } from "../../_lib/leaderboard-names";
 import { MAX_GUESSES } from "../../_lib/wordle";
 
 export const runtime = "nodejs";
 
 type LeaderboardRow = {
-  player_name: string | null;
+  user_id: string;
   points: string | number;
   wins: string | number;
 };
@@ -28,7 +29,7 @@ export async function GET() {
   const sql = getSql();
   const rows = (await sql`
     SELECT
-      (array_agg(player_name ORDER BY completed_at DESC) FILTER (WHERE player_name IS NOT NULL))[1] AS player_name,
+      user_id,
       SUM(${MAX_GUESSES + 1} - guess_count) AS points,
       COUNT(*) AS wins
     FROM game_sessions
@@ -38,11 +39,12 @@ export async function GET() {
     ORDER BY points DESC, wins DESC, MAX(completed_at) ASC, user_id ASC
     LIMIT 25
   `) as LeaderboardRow[];
+  const usernamesById = await getUsernamesById(rows.map((row) => row.user_id));
 
   return Response.json({
     entries: rows.map((row, index) => ({
       rank: index + 1,
-      playerName: row.player_name || `Player ${index + 1}`,
+      playerName: usernamesById.get(row.user_id) || `Player ${index + 1}`,
       points: Number(row.points),
       wins: Number(row.wins),
     })),

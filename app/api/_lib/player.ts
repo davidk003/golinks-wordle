@@ -9,11 +9,5 @@ export async function getCurrentPlayerName() {
     return null;
   }
 
-  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
-
-  return (
-    fullName ||
-    user.username ||
-    null
-  );
+  return user.username?.trim() || null;
 }
