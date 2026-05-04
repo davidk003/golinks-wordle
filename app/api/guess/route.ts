@@ -8,7 +8,6 @@ import {
   recordGuessForSession,
   type GameSession,
 } from "../_lib/game-storage";
-import { getCurrentPlayerName } from "../_lib/player";
 import {
   createGameTokenForPuzzle,
   assertWordleTokenSecretConfigured,
@@ -25,7 +24,26 @@ import {
 
 export const runtime = "nodejs";
 
+function createServerTimingTracker() {
+  const timings: string[] = [];
+  let lastMark = performance.now();
+
+  return {
+    mark(name: string) {
+      const now = performance.now();
+      timings.push(`${name};dur=${(now - lastMark).toFixed(1)}`);
+      lastMark = now;
+    },
+    response(body: unknown) {
+      return Response.json(body, {
+        headers: { "Server-Timing": timings.join(", ") },
+      });
+    },
+  };
+}
+
 export async function POST(request: Request) {
+  const timing = createServerTimingTracker();
   let body: unknown;
 
   try {
@@ -33,6 +51,8 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Invalid JSON body." }, { status: 400 });
   }
+
+  timing.mark("parse");
 
   const guess =
     body && typeof body === "object" && "guess" in body ? body.guess : undefined;
@@ -58,6 +78,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "Not in word list." }, { status: 400 });
   }
 
+  timing.mark("validate");
+
   assertWordleTokenSecretConfigured();
 
   let tokenPayload: GameTokenPayload | null;
@@ -81,15 +103,17 @@ export async function POST(request: Request) {
     );
   }
 
+  timing.mark("token");
+
   const { userId } = await auth();
+  timing.mark("auth");
   let session: GameSession | null = null;
 
   if (userId && hasDatabase()) {
     if (puzzle.mode === "daily") {
-      const playerName = await getCurrentPlayerName();
       session = await getOrCreateDailySession(
         userId,
-        playerName,
+        null,
         puzzle.puzzleNumber,
       );
 
@@ -130,7 +154,10 @@ export async function POST(request: Request) {
     }
   }
 
+  timing.mark("session");
+
   const result = scoreGuess(normalizedGuess, puzzle.word);
+  timing.mark("score");
   const guessCount = session
     ? session.guessCount + 1
     : (tokenPayload?.guessCount ?? 0) + 1;
@@ -156,7 +183,9 @@ export async function POST(request: Request) {
     }
   }
 
-  return Response.json({
+  timing.mark("record");
+
+  return timing.response({
     guess: normalizedGuess,
     result,
     ...(won || lost ? { word: puzzle.word } : {}),

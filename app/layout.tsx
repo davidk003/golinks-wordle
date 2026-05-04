@@ -17,14 +17,14 @@ const geistMono = Geist_Mono({
 const clerkAppearance: ComponentProps<typeof ClerkProvider>["appearance"] = {
   variables: {
     colorPrimary: "#6aaa64",
-    colorPrimaryForeground: "#ffffff",
-    colorForeground: "#020617",
-    colorMutedForeground: "#64748b",
-    colorMuted: "#f8fafc",
-    colorBackground: "#ffffff",
-    colorInput: "#ffffff",
-    colorInputForeground: "#020617",
-    colorBorder: "#d3d6da",
+    colorPrimaryForeground: "#020617",
+    colorForeground: "var(--foreground)",
+    colorMutedForeground: "var(--muted)",
+    colorMuted: "var(--surface-muted)",
+    colorBackground: "var(--surface)",
+    colorInput: "var(--surface)",
+    colorInputForeground: "var(--foreground)",
+    colorBorder: "var(--border)",
     colorRing: "#6aaa64",
     colorSuccess: "#6aaa64",
     colorWarning: "#c9b458",
@@ -42,26 +42,26 @@ const clerkAppearance: ComponentProps<typeof ClerkProvider>["appearance"] = {
   },
   elements: {
     card: {
-      border: "1px solid #d3d6da",
-      boxShadow: "0 8px 24px rgb(15 23 42 / 0.12)",
+      border: "1px solid var(--border)",
+      boxShadow: "0 8px 24px rgb(var(--shadow-color) / 0.18)",
     },
     headerTitle: {
-      color: "#020617",
+      color: "var(--foreground)",
       fontWeight: "900",
       letterSpacing: "-0.03em",
     },
     headerSubtitle: {
-      color: "#64748b",
+      color: "var(--muted)",
       fontWeight: "700",
     },
     socialButtonsBlockButton: {
-      borderColor: "#d3d6da",
+      borderColor: "var(--border)",
       boxShadow: "none",
-      color: "#334155",
+      color: "var(--muted-strong)",
       fontWeight: "700",
     },
     formFieldInput: {
-      borderColor: "#d3d6da",
+      borderColor: "var(--border)",
       boxShadow: "none",
     },
     formButtonPrimary: {
@@ -72,7 +72,7 @@ const clerkAppearance: ComponentProps<typeof ClerkProvider>["appearance"] = {
       textTransform: "uppercase",
     },
     footerActionLink: {
-      color: "#6aaa64",
+      color: "var(--accent-text)",
       fontWeight: "800",
     },
   },
@@ -87,6 +87,23 @@ export const metadata: Metadata = {
   description: "A Wordle-style game for guessing internal go links.",
 };
 
+const themeInitializerScript = `
+(() => {
+  const storageKey = "golinks-wordle-theme";
+  let savedTheme = null;
+
+  try {
+    savedTheme = localStorage.getItem(storageKey);
+  } catch {}
+
+  const theme = savedTheme === "dark" || savedTheme === "light"
+    ? savedTheme
+    : "light";
+
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -96,7 +113,11 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitializerScript }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <ClerkProvider appearance={clerkAppearance}>{children}</ClerkProvider>
       </body>

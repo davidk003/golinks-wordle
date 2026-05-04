@@ -132,9 +132,9 @@ const initialGameState: GameState = {
 };
 
 const resultClassNames: Record<GuessResult, string> = {
-  correct: "border-[#6aaa64] bg-[#6aaa64] text-white",
-  present: "border-[#c9b458] bg-[#c9b458] text-white",
-  absent: "border-[#787c7e] bg-[#787c7e] text-white",
+  correct: "border-[#6aaa64] bg-[#6aaa64] text-[#020617]",
+  present: "border-[#c9b458] bg-[#c9b458] text-[#020617]",
+  absent: "border-[#787c7e] bg-[#787c7e] text-[#020617]",
 };
 
 const resultColors: Record<GuessResult, string> = {
@@ -150,9 +150,9 @@ const shareResultEmoji: Record<GuessResult, string> = {
 };
 
 const keyboardResultClassNames: Record<GuessResult, string> = {
-  correct: "bg-[#6aaa64] text-white",
-  present: "bg-[#c9b458] text-white",
-  absent: "bg-[#787c7e] text-white",
+  correct: "bg-[#6aaa64] text-[#020617]",
+  present: "bg-[#c9b458] text-[#020617]",
+  absent: "bg-[#787c7e] text-[#020617]",
 };
 
 const resultRank: Record<GuessResult, number> = {
@@ -251,7 +251,7 @@ function getTileClassName(result?: GuessResult, isEntering = false) {
   return `flex size-[clamp(2rem,min(15vw,6.2dvh),3.35rem)] items-center justify-center border-2 text-[clamp(1.05rem,6.3vw,1.5rem)] font-black uppercase leading-none ${
     result
       ? `${resultClassNames[result]} wordle-tile-reveal`
-      : `border-[#d3d6da] bg-white text-slate-950 ${
+      : `border-[var(--tile-empty-border)] bg-[var(--tile-empty-bg)] text-[var(--foreground)] ${
           isEntering ? "wordle-tile-enter" : ""
         }`
   }`;
@@ -358,7 +358,7 @@ function getKeyboardKeyClassName(
       : "flex-[1_1_0] min-w-0 px-0.5 text-[clamp(0.68rem,3vw,0.875rem)] sm:px-2";
   const colorClass = result
     ? keyboardResultClassNames[result]
-    : "bg-[#d3d6da] text-black";
+    : "bg-[var(--keyboard-key-bg)] text-[var(--keyboard-key-text)]";
 
   return `${widthClass} ${colorClass} ${
     isPressed ? "keyboard-key-pressed" : ""
@@ -416,9 +416,9 @@ function ShareIcon() {
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 text-center shadow-sm">
-      <div className="text-lg font-black text-slate-950">{value}</div>
-      <div className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.16em] text-slate-500">
+    <div className="rounded-lg border border-[var(--border-muted)] bg-[var(--surface)] p-3 text-center shadow-sm">
+      <div className="text-lg font-black text-[var(--foreground)]">{value}</div>
+      <div className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.16em] text-[var(--muted)]">
         {label}
       </div>
     </div>
@@ -432,8 +432,8 @@ function StatsModeSection({ title, stats }: { title: string; stats: ModeStats })
   );
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-      <h3 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">
+    <section className="rounded-xl border border-[var(--border-muted)] bg-[var(--surface-muted)] p-3">
+      <h3 className="text-sm font-black uppercase tracking-[0.16em] text-[var(--muted-strong)]">
         {title}
       </h3>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -448,7 +448,7 @@ function StatsModeSection({ title, stats }: { title: string; stats: ModeStats })
         <StatCard label="Max streak" value={stats.maxStreak} />
       </div>
       <div className="mt-4 space-y-1.5">
-        <h4 className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">
+        <h4 className="text-xs font-black uppercase tracking-[0.16em] text-[var(--muted)]">
           Guess distribution
         </h4>
         {Array.from({ length: MAX_GUESSES }, (_, index) => index + 1).map(
@@ -458,10 +458,10 @@ function StatsModeSection({ title, stats }: { title: string; stats: ModeStats })
 
             return (
               <div key={guessNumber} className="flex items-center gap-2 text-xs">
-                <span className="w-3 font-black text-slate-500">{guessNumber}</span>
-                <div className="h-5 flex-1 rounded-sm bg-slate-200">
+                <span className="w-3 font-black text-[var(--muted)]">{guessNumber}</span>
+                <div className="h-5 flex-1 rounded-sm bg-[var(--border-muted)]">
                   <div
-                    className="flex h-full items-center justify-end rounded-sm bg-[#6aaa64] px-2 text-[0.65rem] font-black text-white"
+                    className="flex h-full items-center justify-end rounded-sm bg-[#6aaa64] px-2 text-[0.65rem] font-black text-[#020617]"
                     style={{ width }}
                   >
                     {count}
@@ -473,7 +473,7 @@ function StatsModeSection({ title, stats }: { title: string; stats: ModeStats })
         )}
       </div>
       <div className="mt-4">
-        <h4 className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">
+        <h4 className="text-xs font-black uppercase tracking-[0.16em] text-[var(--muted)]">
           Most-used letters
         </h4>
         {stats.favoriteCharacters.length > 0 ? (
@@ -481,14 +481,14 @@ function StatsModeSection({ title, stats }: { title: string; stats: ModeStats })
             {stats.favoriteCharacters.map((character) => (
               <span
                 key={character.character}
-                className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-black text-slate-700"
+                className="rounded-md border border-[var(--border-muted)] bg-[var(--surface)] px-2.5 py-1 text-xs font-black text-[var(--muted-strong)]"
               >
                 {character.character} {character.count}
               </span>
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-xs font-semibold text-slate-500">
+          <p className="mt-2 text-xs font-semibold text-[var(--muted)]">
             Submit guesses to build this list.
           </p>
         )}
@@ -504,14 +504,14 @@ function ScoreInfoTooltip({ tooltipId }: { tooltipId: string }) {
         type="button"
         aria-label="Leaderboard scoring"
         aria-describedby={tooltipId}
-        className="flex size-5 items-center justify-center rounded-full border border-slate-300 bg-white text-[0.65rem] font-black leading-none text-slate-500 transition hover:border-[#6aaa64] hover:text-[#6aaa64] focus:outline-none focus:ring-2 focus:ring-[#6aaa64]/35"
+        className="flex size-5 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[0.65rem] font-black leading-none text-[var(--muted)] transition hover:border-[#6aaa64] hover:text-[var(--accent-text)] focus:outline-none focus:ring-2 focus:ring-[#6aaa64]/35"
       >
         i
       </button>
       <span
         id={tooltipId}
         role="tooltip"
-        className="pointer-events-none absolute right-0 top-full z-10 mt-2 w-56 rounded-lg bg-slate-950 p-3 text-xs font-semibold normal-case tracking-normal text-white opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100"
+        className="pointer-events-none absolute right-0 top-full z-10 mt-2 w-56 rounded-lg bg-[var(--tooltip-bg)] p-3 text-xs font-semibold normal-case tracking-normal text-white opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100"
       >
         Scoring: 6 pts for solving in 1 guess, down to 1 pt for solving in 6.
       </span>
@@ -531,29 +531,29 @@ function LeaderboardSection({
   tooltipId: string;
 }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+    <section className="rounded-xl border border-[var(--border-muted)] bg-[var(--surface-muted)] p-3">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-black uppercase tracking-[0.16em] text-slate-700">
+        <h3 className="text-sm font-black uppercase tracking-[0.16em] text-[var(--muted-strong)]">
           {title}
         </h3>
         <ScoreInfoTooltip tooltipId={tooltipId} />
       </div>
       {leaderboard && leaderboard.entries.length > 0 ? (
-        <ol className="mt-3 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
+        <ol className="mt-3 divide-y divide-[var(--border-muted)] rounded-lg border border-[var(--border-muted)] bg-[var(--surface)]">
           {leaderboard.entries.map((entry) => (
             <li
               key={`${entry.rank}-${entry.playerName}-${entry.points}-${entry.wins}`}
               className="flex items-center gap-3 px-3 py-2 text-sm"
             >
-              <span className="w-7 font-black text-slate-400">#{entry.rank}</span>
-              <span className="min-w-0 flex-1 truncate font-bold text-slate-700">
+              <span className="w-7 font-black text-[var(--muted)]">#{entry.rank}</span>
+              <span className="min-w-0 flex-1 truncate font-bold text-[var(--muted-strong)]">
                 {entry.playerName}
               </span>
               <span className="text-right">
-                <span className="block font-black text-slate-950">
+                <span className="block font-black text-[var(--foreground)]">
                   {entry.points} pts
                 </span>
-                <span className="block text-[0.65rem] font-bold uppercase tracking-[0.12em] text-slate-400">
+                <span className="block text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--muted)]">
                   {entry.wins} {entry.wins === 1 ? "win" : "wins"}
                 </span>
               </span>
@@ -561,7 +561,7 @@ function LeaderboardSection({
           ))}
         </ol>
       ) : (
-        <p className="mt-2 text-xs font-semibold text-slate-500">
+        <p className="mt-2 text-xs font-semibold text-[var(--muted)]">
           {emptyMessage}
         </p>
       )}
@@ -1314,14 +1314,14 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
             onClick={handleShareResults}
             aria-label="Share results"
             aria-describedby={canShare ? "share-results-tooltip" : undefined}
-            className="flex size-10 items-center justify-center rounded-full border border-slate-300 bg-white/95 text-slate-600 shadow-sm transition hover:border-[#6aaa64] hover:text-[#6aaa64] focus:outline-none focus:ring-2 focus:ring-[#6aaa64]/35 active:translate-y-px sm:size-11"
+            className="flex size-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)] shadow-sm transition hover:border-[#6aaa64] hover:text-[var(--accent-text)] focus:outline-none focus:ring-2 focus:ring-[#6aaa64]/35 active:translate-y-px sm:size-11"
           >
             <ShareIcon />
           </button>
           <div
             id="share-results-tooltip"
             role="tooltip"
-            className="pointer-events-none absolute right-0 top-full mt-2 w-max max-w-[min(20rem,calc(100vw-2rem))] rounded-md bg-black/80 p-3 text-left text-xs font-semibold text-white opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100"
+            className="pointer-events-none absolute right-0 top-full mt-2 w-max max-w-[min(20rem,calc(100vw-2rem))] rounded-md bg-[var(--tooltip-bg)] p-3 text-left text-xs font-semibold text-white opacity-0 shadow-lg transition group-hover:opacity-100 group-focus-within:opacity-100"
           >
             {shareTooltipMessage ? (
               <span className="block font-bold" aria-live="polite" aria-atomic="true">
@@ -1338,7 +1338,7 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
 
       <div
         aria-label="Wordle board"
-        className="grid max-w-full grid-cols-5 gap-[clamp(0.125rem,1vw,0.25rem)] rounded-sm border border-slate-200 bg-white p-[clamp(0.125rem,1vw,0.25rem)] shadow-[0_1px_2px_rgba(15,23,42,0.08)]"
+        className="grid max-w-full grid-cols-5 gap-[clamp(0.125rem,1vw,0.25rem)] rounded-sm border border-[var(--border-muted)] bg-[var(--surface)] p-[clamp(0.125rem,1vw,0.25rem)] shadow-[0_1px_2px_rgb(var(--shadow-color)_/_0.08)]"
       >
         {rows.map((row, rowIndex) =>
           Array.from({ length: WORD_LENGTH }, (_, columnIndex) => {
@@ -1369,7 +1369,7 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
       </div>
 
       <div className="flex w-full flex-col items-center gap-[clamp(0.5rem,1.5dvh,0.75rem)] text-center">
-        <p id="game-message" className="text-sm text-slate-500" aria-live="polite">
+        <p id="game-message" className="text-sm text-[var(--muted)]" aria-live="polite">
           {game.message}
         </p>
         <div className="flex flex-wrap justify-center gap-2">
@@ -1377,7 +1377,7 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
             type="button"
             onClick={handleReset}
             disabled={game.isSubmitting || isStartingPractice}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-bold text-[var(--muted-strong)] transition hover:border-[#6aaa64] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             Reset
           </button>
@@ -1385,14 +1385,14 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
             type="button"
             onClick={handleStartPractice}
             disabled={game.isSubmitting || isStartingPractice}
-            className="rounded-md border border-[#6aaa64] bg-[#6aaa64] px-4 py-2 text-sm font-bold text-white transition hover:border-[#5b9956] hover:bg-[#5b9956] disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md border border-[#6aaa64] bg-[#6aaa64] px-4 py-2 text-sm font-bold text-[#020617] transition hover:border-[#5b9956] hover:bg-[#5b9956] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isStartingPractice ? "Starting..." : "New practice"}
           </button>
           <button
             type="button"
             onClick={handleToggleStats}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition hover:border-slate-400 hover:text-slate-900"
+            className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-bold text-[var(--muted-strong)] transition hover:border-[#6aaa64] hover:text-[var(--foreground)]"
             aria-expanded={isStatsOpen}
             aria-controls="wordle-stats-panel"
           >
@@ -1406,12 +1406,12 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
           id="wordle-stats-panel"
           role="region"
           aria-label="Stats and leaderboard"
-          className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
+          className="w-full rounded-2xl border border-[var(--border-muted)] bg-[var(--surface)] p-4 text-left shadow-[0_8px_24px_rgb(var(--shadow-color)_/_0.12)]"
         >
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-black text-slate-950">Stats</h2>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
+              <h2 className="text-base font-black text-[var(--foreground)]">Stats</h2>
+              <p className="mt-1 text-xs font-semibold text-[var(--muted)]">
                 Signed-in games are tracked separately for daily and practice.
               </p>
             </div>
@@ -1419,7 +1419,7 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
               type="button"
               onClick={() => void refreshStatsPanel()}
               disabled={isStatsLoading}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-slate-600 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md border border-[var(--border)] px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-[var(--muted-strong)] transition hover:border-[#6aaa64] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isStatsLoading ? "Loading" : "Refresh"}
             </button>
@@ -1427,13 +1427,13 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
 
           <div aria-live="polite">
             {statsError ? (
-              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+              <p className="mt-3 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-bg)] p-3 text-sm font-semibold text-[var(--warning-text)]">
                 {statsError}
               </p>
             ) : null}
 
             {leaderboardError ? (
-              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+              <p className="mt-3 rounded-lg border border-[var(--warning-border)] bg-[var(--warning-bg)] p-3 text-sm font-semibold text-[var(--warning-text)]">
                 {leaderboardError}
               </p>
             ) : null}
@@ -1445,7 +1445,7 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
               <StatsModeSection title="Practice" stats={stats.practice} />
             </div>
           ) : !statsError ? (
-            <p className="mt-4 text-sm font-semibold text-slate-500" aria-live="polite">
+            <p className="mt-4 text-sm font-semibold text-[var(--muted)]" aria-live="polite">
               {isStatsLoading ? "Loading stats..." : "Open stats to load your records."}
             </p>
           ) : null}
@@ -1470,14 +1470,14 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
       ) : null}
 
       {isKeyboardVisible ? (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-slate-50/95 pb-[calc(env(safe-area-inset-bottom)+clamp(0.35rem,1.5dvh,0.75rem))] pl-[max(0.125rem,env(safe-area-inset-left))] pr-[max(0.125rem,env(safe-area-inset-right))] pt-[clamp(0.25rem,1.2dvh,0.5rem)] shadow-[0_-8px_20px_rgba(15,23,42,0.08)] backdrop-blur sm:px-3">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--border-muted)] bg-[var(--surface-raised)] pb-[calc(env(safe-area-inset-bottom)+clamp(0.35rem,1.5dvh,0.75rem))] pl-[max(0.125rem,env(safe-area-inset-left))] pr-[max(0.125rem,env(safe-area-inset-right))] pt-[clamp(0.25rem,1.2dvh,0.5rem)] shadow-[0_-8px_20px_rgb(var(--shadow-color)_/_0.12)] backdrop-blur sm:px-3">
           <div className="mx-auto flex w-full max-w-[31rem] flex-col gap-[clamp(0.1875rem,0.8dvh,0.5rem)]">
             <div className="px-[clamp(0.25rem,2vw,0.5rem)]">
               <button
                 type="button"
                 onClick={handleHideKeyboard}
                 aria-label="Hide keyboard"
-                className="relative z-10 flex h-8 w-full touch-manipulation select-none items-center justify-center gap-1 rounded-md border border-transparent text-xs font-bold uppercase tracking-[0.12em] text-slate-500 transition hover:bg-white/80 hover:text-slate-900 active:translate-y-px"
+                className="relative z-10 flex h-8 w-full touch-manipulation select-none items-center justify-center gap-1 rounded-md border border-transparent text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted)] transition hover:bg-[var(--surface)] hover:text-[var(--foreground)] active:translate-y-px"
               >
                 <ChevronDownIcon />
                 Hide keyboard
@@ -1510,7 +1510,7 @@ export function WordleGame({ allowedGuesses }: WordleGameProps) {
           type="button"
           onClick={handleShowKeyboard}
           aria-label="Show keyboard"
-          className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-[calc(env(safe-area-inset-right)+0.75rem)] z-20 flex size-11 touch-manipulation select-none items-center justify-center rounded-full border border-slate-300 bg-white/95 text-slate-600 shadow-lg transition hover:border-slate-400 hover:text-slate-950 active:translate-y-px"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-[calc(env(safe-area-inset-right)+0.75rem)] z-20 flex size-11 touch-manipulation select-none items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)] shadow-lg transition hover:border-[#6aaa64] hover:text-[var(--foreground)] active:translate-y-px"
         >
           <KeyboardIcon />
         </button>
